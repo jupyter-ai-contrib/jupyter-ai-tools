@@ -19,9 +19,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Framework :: Jupyter",
 ]
-dependencies = ["jupyter_server>=1.6,<3"]
 
-
+dependencies = [
+  "jupyter_server>=1.6,<3",
+  "jupyterlab_git",         
+  "jupyter_ydoc",           
+]
 
 [project.optional-dependencies]
 test = [
