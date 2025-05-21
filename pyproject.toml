@@ -22,9 +22,11 @@ classifiers = [
 
 dependencies = [
   "jupyter_server>=1.6,<3",
-  "jupyterlab_git",         
-  "jupyter_ydoc",           
+  "jupyterlab_git",
+  "jupyter_ydoc",
+  "jupyter_server_ai_tools>=0.1.0", 
 ]
+
 
 [project.optional-dependencies]
 test = [
