@@ -45,6 +45,9 @@ file="LICENSE"
 [project.urls]
 Home = "https://github.com/Abigayle-Mercer/jupyter-ai-tools"
 
+[project.entry-points."jupyter_server.extension"]
+jupyter_ai_tools = "jupyter_ai_tools"
+
 [tool.hatch.version]
 path = "jupyter_ai_tools/__init__.py"
 
