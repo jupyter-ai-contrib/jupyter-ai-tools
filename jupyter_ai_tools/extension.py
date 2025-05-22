@@ -33,7 +33,7 @@ def jupyter_server_extension_tools():
                         "index": {"type": "integer", "description": "The index to insert at"},
                         "cell_type": {
                             "type": "string",
-                            "description": "The type of cell",
+                            "description": "The type of cell: 'code' or 'markdown' ",
                             "default": "code",
                         },
                     },
@@ -45,14 +45,16 @@ def jupyter_server_extension_tools():
             callable=ynotebook_tools.write_to_cell,
             metadata={
                 "name": "write_to_cell",
-                "description": "Overwrite the source of a cell with content at the given index.",
+                "description": "Overwrite the source of a cell with content at the given index "
+                "in the notebook.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "index": {"type": "integer", "description": "The index to write at"},
                         "content": {
                             "type": "string",
-                            "description": "The content to write into the cell",
+                            "description": "The content to write into the cell, either python "
+                            "code or markdown",
                         },
                     },
                     "required": ["index", "content"],
@@ -71,7 +73,8 @@ def jupyter_server_extension_tools():
             callable=ynotebook_tools.read_cell,
             metadata={
                 "name": "read_cell",
-                "description": "Read the full content of a specific cell.",
+                "description": "Read the full content of a specific cell, including outputs, "
+                "source, and metadata.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -111,7 +114,12 @@ def jupyter_server_extension_tools():
                 "description": "Get the current Git status in the specified path.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {"path": {"type": "string", "description": "Repo path"}},
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to " "the Git repository root directory",
+                        }
+                    },
                     "required": ["path"],
                 },
             },
@@ -124,7 +132,10 @@ def jupyter_server_extension_tools():
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Repo path"},
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the Git " "repository root directory",
+                        },
                         "history_count": {
                             "type": "integer",
                             "description": "Number of commits",
@@ -142,7 +153,12 @@ def jupyter_server_extension_tools():
                 "description": "Pull the latest changes from the remote.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {"path": {"type": "string", "description": "Repo path"}},
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the " "Git repository root directory",
+                        }
+                    },
                     "required": ["path"],
                 },
             },
@@ -155,7 +171,10 @@ def jupyter_server_extension_tools():
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Repo path"},
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the Git " "repository root directory",
+                        },
                         "branch": {"type": "string", "description": "Repo branch"},
                     },
                     "required": ["path"],
@@ -170,7 +189,10 @@ def jupyter_server_extension_tools():
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Repo path"},
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the Git " "repository root directory",
+                        },
                         "message": {"type": "string", "description": "Commit message"},
                     },
                     "required": ["path", "message"],
@@ -185,7 +207,10 @@ def jupyter_server_extension_tools():
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Repo path"},
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the " "Git repository root directory",
+                        },
                         "add_all": {
                             "type": "boolean",
                             "default": True,
@@ -204,7 +229,7 @@ def jupyter_server_extension_tools():
             callable=git_tools.git_get_repo_root,
             metadata={
                 "name": "git_get_repo_root_from_notebookpath",
-                "description": "Given the path of a file, return the path to the Repo root,"
+                "description": "Given the path of a file, return the path to the Repo root"
                 " if any.",
                 "inputSchema": {
                     "type": "object",
