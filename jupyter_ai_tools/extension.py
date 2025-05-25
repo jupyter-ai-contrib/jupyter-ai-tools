@@ -117,7 +117,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to " "the Git repository root directory",
+                            "description": "Path to the Git repository root directory",
                         }
                     },
                     "required": ["path"],
@@ -134,7 +134,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the Git " "repository root directory",
+                            "description": "Path to the Git repository root directory",
                         },
                         "history_count": {
                             "type": "integer",
@@ -156,7 +156,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the " "Git repository root directory",
+                            "description": "Path to the Git repository root directory",
                         }
                     },
                     "required": ["path"],
@@ -173,7 +173,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the Git " "repository root directory",
+                            "description": "Path to the Git repository root directory",
                         },
                         "branch": {"type": "string", "description": "Repo branch"},
                     },
@@ -191,7 +191,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the Git " "repository root directory",
+                            "description": "Path to the Git repository root directory",
                         },
                         "message": {"type": "string", "description": "Commit message"},
                     },
@@ -209,7 +209,7 @@ def jupyter_server_extension_tools():
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the " "Git repository root directory",
+                            "description": "Path to the Git repository root directory",
                         },
                         "add_all": {
                             "type": "boolean",
@@ -233,7 +233,7 @@ def jupyter_server_extension_tools():
                 " if any.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {"path": {"type": "string", "description": "notebook path"}},
+                    "properties": {"path": {"type": "string", "description": "the path to a file"}},
                     "required": ["path"],
                 },
             },
