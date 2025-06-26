@@ -223,7 +223,7 @@ def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> int | None:
     return None
 
 
-def _determine_insert_index(cells_count: int, cell_index: int, add_above: bool) -> int:
+def _determine_insert_index(cells_count: int, cell_index: str, add_above: bool) -> int:
     if cell_index is None:
         insert_index = cells_count
     else:

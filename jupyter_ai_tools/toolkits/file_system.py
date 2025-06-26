@@ -189,7 +189,7 @@ async def search_and_replace(
         return f"Error: Failed to search and edit file: {str(e)}"
 
 
-async def glob(pattern: str, path: Optional[str] = None) -> List[str]:
+async def glob(pattern: str, path: Optional[str] = None) -> str:
     """Searches for files that matches the glob pattern
 
     Args:
@@ -296,10 +296,10 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
     """
     try:
         if not os.path.exists(path):
-            return [f"Error: Path not found: {path}"]
+            return f"Error: Path not found: {path}"
 
         if not os.path.isdir(path):
-            return [f"Error: Not a directory: {path}"]
+            return f"Error: Not a directory: {path}"
 
         # Get all files and directories in the given path
         items = await asyncio.to_thread(os.listdir, path)
@@ -329,7 +329,7 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
 
         return "\n".join(full_paths)
     except Exception as e:
-        return [f"Error: Failed to list directory: {str(e)}"]
+        return f"Error: Failed to list directory: {str(e)}"
 
 
 toolkit = Toolkit(
