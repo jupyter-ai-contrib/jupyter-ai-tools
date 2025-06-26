@@ -1,6 +1,7 @@
 import json
 import os
 
+from jupyter_ai.tools.models import Tool, Toolkit
 from jupyterlab_git.git import Git
 
 git = Git()
@@ -162,3 +163,17 @@ async def git_get_repo_root(path: str) -> str:
     if res["code"] == 0 and res.get("path"):
         return f"📁 Repo root: {res['path']}"
     return f"❌ Not inside a Git repo. {res.get('message', '')}"
+
+
+toolkit = Toolkit(
+    name="git_toolkit",
+    description="Tools for working with Git repositories.",
+)
+toolkit.add_tool(Tool(callable=git_clone, execute=True))
+toolkit.add_tool(Tool(callable=git_status, read=True))
+toolkit.add_tool(Tool(callable=git_log, read=True))
+toolkit.add_tool(Tool(callable=git_pull, execute=True))
+toolkit.add_tool(Tool(callable=git_push, execute=True))
+toolkit.add_tool(Tool(callable=git_commit, execute=True))
+toolkit.add_tool(Tool(callable=git_add, execute=True))
+toolkit.add_tool(Tool(callable=git_get_repo_root, read=True))

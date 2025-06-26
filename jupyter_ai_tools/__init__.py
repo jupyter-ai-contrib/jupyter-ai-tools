@@ -1,7 +1,3 @@
-from .extension import jupyter_server_extension_tools
-
-__all__ = ["jupyter_server_extension_tools"]
-
 __version__ = "0.1.2"
 
 
