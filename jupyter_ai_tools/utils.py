@@ -105,7 +105,7 @@ def metadata_to_md(metadata_json: dict) -> str:
     Returns:
         Markdown string with YAML formatted metadata
     """
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 
     yaml_str = yaml.dump(metadata_json, default_flow_style=False)
     return f"```yaml\n{yaml_str}```"

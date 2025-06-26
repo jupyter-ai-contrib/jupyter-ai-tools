@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 import nbformat
 from jupyter_ai.tools.models import Tool, Toolkit
@@ -193,7 +193,7 @@ def read_cell_nbformat(file_path: str, cell_id: str) -> Dict[str, Any]:
 
 def summarize_notebook(file_id: str, max_length: int = 500) -> str:
     """Generates a summary of the notebook content"""
-    pass
+    raise NotImplementedError("Implementation todo")
 
 
 def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> int | None:
@@ -223,7 +223,7 @@ def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> int | None:
     return None
 
 
-def _determine_insert_index(cells_count: int, cell_index: str, add_above: bool) -> int:
+def _determine_insert_index(cells_count: int, cell_index: Optional[int], add_above: bool) -> int:
     if cell_index is None:
         insert_index = cells_count
     else:

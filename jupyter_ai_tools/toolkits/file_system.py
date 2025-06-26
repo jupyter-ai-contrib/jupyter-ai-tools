@@ -202,7 +202,7 @@ async def glob(pattern: str, path: Optional[str] = None) -> str:
     try:
         search_path = path or os.getcwd()
         if not os.path.exists(search_path):
-            return [f"Error: Path not found: {search_path}"]
+            return f"Error: Path not found: {search_path}"
 
         # Use asyncio.to_thread to run glob in a separate thread
         matching_files = await asyncio.to_thread(_glob_search, search_path, pattern)
@@ -216,7 +216,7 @@ async def glob(pattern: str, path: Optional[str] = None) -> str:
         
         return "\n".join(matching_files)
     except Exception as e:
-        return [f"Error: Failed to perform glob search: {str(e)}"]
+        return f"Error: Failed to perform glob search: {str(e)}"
 
 
 def _glob_search(search_path: str, pattern: str) -> List[str]:
