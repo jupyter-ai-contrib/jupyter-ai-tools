@@ -1,5 +1,4 @@
 from jupyter_server.base.call_context import CallContext
-import nbformat
 
 
 def get_serverapp():
@@ -54,7 +53,7 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
 
     Returns:
         Markdown string representation of the notebook
-        
+
     Example:
         ```markdown
         ```yaml
@@ -63,20 +62,20 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
           language: python
           name: python3
         ```
-        
+
         ### Cell 0
-        
+
         #### Metadata
         ```yaml
         type: code
         execution_count: 1
         ```
-        
+
         #### Source
         ```python
         print("Hello world")
         ```
-        
+
         #### Output
         ```
         Hello world
@@ -87,13 +86,11 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
     md_parts = []
 
     # Add notebook metadata at the top
-    md_parts.append(
-        metadata_to_md(notebook_json.get("metadata", {}))
-    )
+    md_parts.append(metadata_to_md(notebook_json.get("metadata", {})))
 
     # Process all cells
     for i, cell in enumerate(notebook_json.get("cells", [])):
-        md_parts.append(cell_to_md(cell, index=i, include_outputs=outputs))
+        md_parts.append(cell_to_md(cell, index=i, include_outputs=include_outputs))
 
     # Join all parts with double newlines
     return "\n\n".join(md_parts)
@@ -202,29 +199,3 @@ def format_outputs(outputs: list) -> str:
             result.append(f"```\n{traceback}```")
 
     return "\n\n".join(result)
-
-# Note: We might end up removing this, as nbconvert doesn't emit metadata
-# and currently failing with server outputs
-def nbformat_to_md(notebook: nbformat.NotebookNode, outputs: bool = False) -> str:
-    """Converts a notebook in nbformat to markdown string
-
-    Args:
-        notebook: The notebook to convert to markdown
-        outputs: Whether to include cell outputs in the markdown. Default is False.
-
-    Returns:
-        Markdown string representation of the notebook
-    """
-    from nbconvert.exporters import MarkdownExporter
-
-    # Create the markdown exporter instance
-    exporter = MarkdownExporter()
-
-    # Configure exporter based on outputs flag
-    if not outputs:
-        exporter.exclude_output = True
-
-    # Convert notebook to markdown
-    markdown, _ = exporter.from_notebook_node(notebook)
-
-    return markdown
