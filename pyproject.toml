@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
   "jupyter_server>=1.6,<3",
   "jupyterlab_git",
-  "jupyter_ai>=3.0.0-beta.0" # Needs update after Jupyter AI released with tool models
+  "jupyter_ai>=3.0.0-beta.1"
 ]
 
 
