@@ -2,8 +2,8 @@ import json
 from typing import Any, Dict, Literal, Tuple
 
 import nbformat
-
 from jupyter_ai.tools.models import Tool, Toolkit
+
 from ..utils import cell_to_md, get_file_id, get_jupyter_ydoc, notebook_json_to_md
 
 
@@ -237,8 +237,8 @@ toolkit = Toolkit(
     name="notebook_toolkit",
     description="Tools for reading and manipulating Jupyter notebooks.",
 )
-toolkit.add(Tool(callable=read_notebook, read=True))
-toolkit.add(Tool(callable=read_cell, read=True))
-toolkit.add(Tool(callable=add_cell, write=True))
-toolkit.add(Tool(callable=delete_cell, delete=True))
-toolkit.add(Tool(callable=edit_cell, read=True, write=True))
+toolkit.add_tool(Tool(callable=read_notebook, read=True))
+toolkit.add_tool(Tool(callable=read_cell, read=True))
+toolkit.add_tool(Tool(callable=add_cell, write=True))
+toolkit.add_tool(Tool(callable=delete_cell, delete=True))
+toolkit.add_tool(Tool(callable=edit_cell, read=True, write=True))

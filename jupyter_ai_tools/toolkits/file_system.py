@@ -9,7 +9,7 @@ from typing import List, Optional
 from jupyter_ai.tools.models import Tool, Toolkit
 
 
-async def read(file_path: str, offset: Optional[int] = None, limit: Optional[int] = None) -> str:
+def read(file_path: str, offset: Optional[int] = None, limit: Optional[int] = None) -> str:
     """Reads a file from the local filesystem
 
     Args:
@@ -27,13 +27,13 @@ async def read(file_path: str, offset: Optional[int] = None, limit: Optional[int
         if not os.path.isfile(file_path):
             return f"Error: Not a file: {file_path}"
 
-        content = await _read_file_content(file_path, offset, limit)
+        content = _read_file_content(file_path, offset, limit)
         return content
     except Exception as e:
         return f"Error: Failed to read file: {str(e)}"
 
 
-async def _read_file_content(
+def _read_file_content(
     file_path: str, offset: Optional[int] = None, limit: Optional[int] = None
 ) -> str:
     """Helper function to read file content in a separate thread"""
@@ -41,17 +41,17 @@ async def _read_file_content(
         if offset is not None:
             # Skip lines until we reach the offset
             for _ in range(offset):
-                line = await f.readline()
+                line = f.readline()
                 if not line:
                     break
 
         # Read the specified number of lines or all lines if limit is None
         if limit is not None:
-            lines = [await f.readline() for _ in range(limit)]
+            lines = [f.readline() for _ in range(limit)]
             # Filter out None values in case we hit EOF
             lines = [line for line in lines if line]
         else:
-            lines = await f.readlines()
+            lines = f.readlines()
 
         # Add line numbers (starting from offset+1 if offset is provided)
         start_line = (offset or 0) + 1
@@ -60,7 +60,6 @@ async def _read_file_content(
         return "".join(numbered_lines)
 
 
-# Question: Should this be async?
 def write(file_path: str, content: str) -> str:
     """Writes content to a file on the local filesystem
 
@@ -89,7 +88,7 @@ def _write_file_content(file_path: str, content: str) -> None:
         f.write(content)
 
 
-async def edit(file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
+def edit(file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     """Performs string replacement in a file
 
     Args:
@@ -114,7 +113,7 @@ async def edit(file_path: str, old_string: str, new_string: str, replace_all: bo
 
         # Check if old_string exists in the file
         if old_string not in content:
-            return f"Error: String to replace not found in file"
+            return "Error: String to replace not found in file"
 
         # Perform the replacement
         if replace_all:
@@ -209,12 +208,13 @@ async def glob(pattern: str, path: Optional[str] = None) -> List[str]:
         matching_files = await asyncio.to_thread(_glob_search, search_path, pattern)
 
         if not matching_files:
-            return []
+            return "No matching files found"
 
         # Sort files by modification time (most recent first)
         matching_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
-
-        return matching_files
+        matching_files = [str(f) for f in matching_files]
+        
+        return "\n".join(matching_files)
     except Exception as e:
         return [f"Error: Failed to perform glob search: {str(e)}"]
 
@@ -284,7 +284,7 @@ async def grep(
         return [f"Error: Failed to perform grep search: {str(e)}"]
 
 
-async def ls(path: str, ignore: Optional[List[str]] = None) -> List[str]:
+async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
     """Lists files and directories in a given path
 
     Args:
@@ -327,7 +327,7 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> List[str]:
         # Sort by type (directories first) and then by name
         full_paths.sort(key=lambda p: (0 if os.path.isdir(p) else 1, p.lower()))
 
-        return full_paths
+        return "\n".join(full_paths)
     except Exception as e:
         return [f"Error: Failed to list directory: {str(e)}"]
 
@@ -336,11 +336,11 @@ toolkit = Toolkit(
     name="file_system_toolkit",
     description="Tools to do search, list, read, write and edit operations on files.",
 )
-toolkit.add(Tool(callable=read, read=True))
-toolkit.add(Tool(callable=write, write=True))
-toolkit.add(Tool(callable=edit, read=True, write=True))
-toolkit.add(Tool(callable=search_and_replace, read=True, write=True))
-toolkit.add(Tool(callable=glob, read=True))
-toolkit.add(Tool(callable=grep, read=True))
-toolkit.add(Tool(callable=ls, read=True))
+toolkit.add_tool(Tool(callable=read, read=True))
+toolkit.add_tool(Tool(callable=edit, read=True, write=True))
+toolkit.add_tool(Tool(callable=write, write=True))
+toolkit.add_tool(Tool(callable=search_and_replace, read=True, write=True))
+toolkit.add_tool(Tool(callable=glob, read=True))
+toolkit.add_tool(Tool(callable=grep, read=True))
+toolkit.add_tool(Tool(callable=ls, read=True))
 

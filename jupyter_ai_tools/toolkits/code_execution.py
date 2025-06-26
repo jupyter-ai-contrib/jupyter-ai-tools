@@ -45,5 +45,5 @@ toolkit = Toolkit(
     name="code_execution_toolkit",
     description="Tools to execute code in different environments.",
 )
-toolkit.add(Tool(callable=bash, execute=True))
+toolkit.add_tool(Tool(callable=bash, execute=True))
 
