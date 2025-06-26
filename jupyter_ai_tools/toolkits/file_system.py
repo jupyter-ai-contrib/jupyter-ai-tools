@@ -213,7 +213,7 @@ async def glob(pattern: str, path: Optional[str] = None) -> str:
         # Sort files by modification time (most recent first)
         matching_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
         matching_files = [str(f) for f in matching_files]
-        
+
         return "\n".join(matching_files)
     except Exception as e:
         return f"Error: Failed to perform glob search: {str(e)}"
@@ -343,4 +343,3 @@ toolkit.add_tool(Tool(callable=search_and_replace, read=True, write=True))
 toolkit.add_tool(Tool(callable=glob, read=True))
 toolkit.add_tool(Tool(callable=grep, read=True))
 toolkit.add_tool(Tool(callable=ls, read=True))
-
