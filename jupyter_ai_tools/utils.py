@@ -1,14 +1,14 @@
-from jupyter_server.base.call_context import CallContext
+from jupyter_server.serverapp import ServerApp
 
 
-def get_serverapp():
+async def get_serverapp():
     """Returns the server app from the request context"""
-    handler = CallContext.get(CallContext.JUPYTER_HANDLER)
-    serverapp = handler.serverapp
-    return serverapp
+
+    server = ServerApp.instance()
+    return server
 
 
-def get_jupyter_ydoc(file_id: str):
+async def get_jupyter_ydoc(file_id: str):
     """Returns the notebook ydoc
 
     Args:
@@ -17,16 +17,17 @@ def get_jupyter_ydoc(file_id: str):
     Returns:
         `YNotebook` ydoc for the notebook
     """
-    serverapp = get_serverapp()
+    serverapp = await get_serverapp()
     yroom_manager = serverapp.web_app.settings["yroom_manager"]
     room_id = f"json:notebook:{file_id}"
+
     if yroom_manager.has_room(room_id):
         yroom = yroom_manager.get_room(room_id)
-        notebook = yroom.get_jupyter_ydoc()
+        notebook = await yroom.get_jupyter_ydoc()
         return notebook
 
 
-def get_file_id(file_path: str) -> str:
+async def get_file_id(file_path: str) -> str:
     """Returns the file_id for the document
 
     Args:
@@ -37,7 +38,7 @@ def get_file_id(file_path: str) -> str:
         The file ID of the document
     """
 
-    serverapp = get_serverapp()
+    serverapp = await get_serverapp()
     file_id_manager = serverapp.web_app.settings["file_id_manager"]
     file_id = file_id_manager.get_id(file_path)
 

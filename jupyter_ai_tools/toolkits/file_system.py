@@ -64,8 +64,10 @@ def write(file_path: str, content: str) -> str:
     """Writes content to a file on the local filesystem
 
     Args:
-        file_path: The absolute path to the file to write
-        content: The content to write to the file
+        file_path:
+            The absolute path to the file to write
+        content:
+            The content to write to the file
 
     Returns:
         A success message or error message
@@ -92,10 +94,14 @@ def edit(file_path: str, old_string: str, new_string: str, replace_all: bool = F
     """Performs string replacement in a file
 
     Args:
-        file_path: The absolute path to the file to modify
-        old_string: The text to replace
-        new_string: The text to replace it with
-        replace_all: Replace all occurrences of old_string (default False)
+        file_path:
+            The absolute path to the file to modify
+        old_string:
+            The text to replace
+        new_string:
+            The text to replace it with
+        replace_all:
+            Replace all occurrences of old_string (default False)
 
     Returns:
         A success message or error message
@@ -140,10 +146,14 @@ async def search_and_replace(
     """Performs pattern search and replace in a file.
 
     Args:
-        file_path: The absolute path to the file to modify
-        pattern: The pattern to search for (supports sed syntax)
-        replacement: The replacement text
-        replace_all: Replace all occurrences of pattern (default False)
+        file_path:
+            The absolute path to the file to modify
+        pattern:
+            The pattern to search for (supports sed syntax)
+        replacement:
+            The replacement text
+        replace_all:
+            Replace all occurrences of pattern (default False)
 
     Returns:
         A success message or error message
@@ -193,8 +203,10 @@ async def glob(pattern: str, path: Optional[str] = None) -> str:
     """Searches for files that matches the glob pattern
 
     Args:
-        pattern: The glob pattern to match files against
-        path: The directory to search in (optional, defaults to current directory)
+        pattern:
+            The glob pattern to match files against
+        path:
+            The directory to search in (optional, defaults to current directory)
 
     Returns:
         A list of matching file paths sorted by modification time
@@ -237,9 +249,12 @@ async def grep(
     """Fast content search using regular expressions
 
     Args:
-        pattern: The regular expression pattern to search for in file contents
-        include: File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}") (optional)
-        path: The directory to search in (optional, defaults to current directory)
+        pattern:
+            The regular expression pattern to search for in file contents
+        include:
+            File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}") (optional)
+        path:
+            The directory to search in (optional, defaults to current directory)
 
     Returns:
         A list of file paths with at least one match
@@ -288,8 +303,10 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
     """Lists files and directories in a given path
 
     Args:
-        path: The absolute path to the directory to list
-        ignore: List of glob patterns to ignore (optional)
+        path:
+            The absolute path to the directory to list
+        ignore:
+            List of glob patterns to ignore (optional)
 
     Returns:
         A list of files and directories in the given path
