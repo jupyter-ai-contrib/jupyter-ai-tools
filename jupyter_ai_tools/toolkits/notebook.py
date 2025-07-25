@@ -9,7 +9,7 @@ from jupyter_ai.tools.models import Tool, Toolkit
 from pycrdt import Awareness, Doc, Text, Assoc
 from jupyter_ydoc import YNotebook
 
-from ..utils import cell_to_md, get_file_id, get_jupyter_ydoc, notebook_json_to_md, get_global_awareness
+from ..utils import cell_to_md, get_file_id, get_jupyter_ydoc, notebook_json_to_md, get_global_awareness, collaborative_tool
 import re
 
 
@@ -161,7 +161,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         raise
 
 
-async def get_cell_id_from_index(file_path: str, cell_index: int) -> Optional[int]:
+async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
     """Finds the cell_id of the cell at a specific cell index.
 
     This function reads a Jupyter notebook file and returns the UUID of the cell
@@ -250,7 +250,7 @@ async def add_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content)
+            await write_to_cell_collaboratively(ydoc, ycell, content or "")
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -316,7 +316,7 @@ async def insert_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content)
+            await write_to_cell_collaboratively(ydoc, ycell, content or "")
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -385,7 +385,7 @@ async def delete_cell(file_path: str, cell_id: str):
         raise
 
 
-def get_cursor_details(cell_source, start_index: int, stop_index: int = None) -> dict:
+def get_cursor_details(cell_source: Text, start_index: int, stop_index: Optional[int] = None) -> Dict[str, Any]:
     """
     Creates cursor details for collaborative notebook cursor positioning.
     
@@ -410,7 +410,7 @@ def get_cursor_details(cell_source, start_index: int, stop_index: int = None) ->
     head_sticky_index_data = head_sticky_index.to_json()
     
     # Initialize cursor details with default values
-    cursor_details = {"primary": True, "empty": True}
+    cursor_details: Dict[str, Any] = {"primary": True, "empty": True}
     
     # Set the head position (where cursor starts)
     cursor_details["head"] = {
@@ -438,7 +438,7 @@ def get_cursor_details(cell_source, start_index: int, stop_index: int = None) ->
     return cursor_details
 
 
-def set_cursor_in_ynotebook(ynotebook, cell_source, start_index: int, stop_index: int = None) -> None:
+def set_cursor_in_ynotebook(ynotebook: YNotebook, cell_source: Text, start_index: int, stop_index: Optional[int] = None) -> None:
     """
     Sets the cursor position in a collaborative notebook environment.
     
@@ -468,7 +468,8 @@ def set_cursor_in_ynotebook(ynotebook, cell_source, start_index: int, stop_index
         details = get_cursor_details(cell_source, start_index, stop_index=stop_index)
         
         # Update the awareness system with the cursor position
-        ynotebook.awareness.set_local_state_field("cursors", [details])
+        if ynotebook.awareness:
+            ynotebook.awareness.set_local_state_field("cursors", [details])
     except Exception:
         # Silently ignore cursor setting errors to avoid breaking main operations
         # This is intentional - cursor positioning is a visual enhancement, not critical
@@ -704,7 +705,7 @@ async def _handle_replace_operation(ynotebook, cell_source, cursor_position: int
     return cursor_position
 
 
-def _safe_set_cursor(ynotebook, cell_source, cursor_position: int, stop_cursor: int = None) -> None:
+def _safe_set_cursor(ynotebook: YNotebook, cell_source: Text, cursor_position: int, stop_cursor: Optional[int] = None) -> None:
     """
     Safely set cursor position with error handling.
     

@@ -48,7 +48,7 @@ class TestWriteToCellCollaboratively:
     async def test_input_validation_non_string_content(self):
         """Test that non-string content raises TypeError."""
         with pytest.raises(TypeError, match="content must be a string"):
-            await write_to_cell_collaboratively(self.mock_ynotebook, self.mock_ycell, 123)
+            await write_to_cell_collaboratively(self.mock_ynotebook, self.mock_ycell, 123)  # type: ignore
 
     @pytest.mark.asyncio
     async def test_input_validation_negative_typing_speed(self):
