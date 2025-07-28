@@ -38,6 +38,8 @@ ______________________________________________________________________
 
 For developers building AI tools that need collaborative awareness, `jupyter_ai_tools` provides a `collaborative_tool` decorator that automatically enables real-time collaboration features:
 
+This decorator enables other users in the same Jupyter environment to see when your AI tool is actively working on shared notebooks, improving the collaborative experience.
+
 ```python
 from jupyter_ai_tools.utils import collaborative_tool
 
@@ -56,15 +58,8 @@ async def my_notebook_tool(file_path: str, content: str):
     # - Global awareness system (all users can see Alice is active)
     # - Notebook-specific awareness (for .ipynb files)
     return f"Processed {file_path}"
-
-# For tools without user context, simply omit the user parameter
-@collaborative_tool()
-async def my_tool_no_user(file_path: str):
-    """Tool without collaborative awareness"""
-    return f"Processed {file_path}"
 ```
 
-This decorator enables other users in the same Jupyter environment to see when your AI tool is actively working on shared notebooks, improving the collaborative experience.
 
 ______________________________________________________________________
 
