@@ -1,16 +1,20 @@
-import json
 import asyncio
 import difflib
-
+import json
+import re
 from typing import Any, Dict, Literal, Optional, Tuple
 
 import nbformat
 from jupyter_ai.tools.models import Tool, Toolkit
-from pycrdt import Awareness, Doc, Text, Assoc
 from jupyter_ydoc import YNotebook
+from pycrdt import Assoc, Text
 
-from ..utils import cell_to_md, get_file_id, get_jupyter_ydoc, notebook_json_to_md, get_global_awareness, collaborative_tool
-import re
+from ..utils import (
+    cell_to_md,
+    get_file_id,
+    get_jupyter_ydoc,
+    notebook_json_to_md,
+)
 
 
 def _is_uuid_like(value: str) -> bool:
@@ -69,7 +73,7 @@ async def read_notebook(file_path: str, include_outputs=False) -> str:
         notebook_dict = await read_notebook_json(file_path)
         notebook_md = notebook_json_to_md(notebook_dict, include_outputs=include_outputs)
         return notebook_md
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -90,7 +94,7 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
         with open(file_path, "r", encoding="utf-8") as f:
             notebook_dict = json.load(f)
             return notebook_dict
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -121,7 +125,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
         cell_md = cell_to_md(cell, cell_index)
         return cell_md
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -157,7 +161,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         
         raise LookupError(f"No cell found with {cell_id=}")
         
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -193,7 +197,7 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
 
         return cell_id
         
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -269,7 +273,7 @@ async def add_cell(
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
             
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -333,7 +337,7 @@ async def insert_cell(
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
             
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -381,7 +385,7 @@ async def delete_cell(file_path: str, cell_id: str):
         if cell_index is None:
             raise ValueError(f"Could not find cell index for {cell_id=}")
             
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -784,7 +788,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
             else:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
                 
-    except Exception as e:
+    except Exception:
         raise
 
 
@@ -903,99 +907,11 @@ def _determine_insert_index(cells_count: int, cell_index: Optional[int], add_abo
 
 
 
-
-# async def set_persona_awareness(
-#     file_path: str,
-#     username: str,
-#     name: str,
-#     display_name: str,
-#     initials: str,
-#     avatar_url: str = "",
-#     color: str = "var(--jp-collaborator-color1)",
-#     mention_name: str = "",
-#     current: str = "",
-#     documents: list = None
-# ) -> str:
-#     """Sets user awareness information in the notebook's YDoc.
-    
-#     This function sets both the local and global "user" field in the notebook's
-#     awareness state with the provided user information based on the Jupyter Server user model.
-    
-#     Args:
-#         file_path: The relative path to the notebook file on the filesystem.
-#         username: The username of the user
-#         name: The full name of the user
-#         display_name: The display name for the user
-#         initials: User's initials for avatar display
-#         avatar_url: URL to the user's avatar image (optional)
-#         color: CSS color variable for user identification (optional)
-#         mention_name: The mention name for @-mentions (optional, defaults to @username)
-#         current: Current context/status string (optional)
-#         documents: List of documents the user is working with (optional)
-    
-#     Returns:
-#         Success message or error message
-#     """
-#     try:
-#         print(f"DEBUG: set_user_awareness called with file_path='{file_path}', username='{username}'")
-        
-#         file_id = await get_file_id(file_path)
-#         ydoc = await get_jupyter_ydoc(file_id)
-#         global_awareness = await get_global_awareness()
-        
-#         if not ydoc:
-#             return f"Error: Could not access notebook document for {file_path}. Notebook may not be open."
-        
-#         # Set default mention_name if not provided
-#         if not mention_name:
-#             mention_name = f"@{username}"
-            
-#         # Set default documents list if not provided
-#         if documents is None:
-#             documents = [file_path]
-        
-#         # Create user model based on Jupyter Server user model
-#         user_model = {
-#             "username": username,
-#             "name": name,
-#             "display_name": display_name,
-#             "initials": initials,
-#             "avatar_url": avatar_url,
-#             "color": color,
-#             "mention_name": mention_name
-#         }
-        
-#         print(f"DEBUG: set_user_awareness setting user awareness with model: {user_model}")
-        
-#         # Set the local user field in the notebook's awareness
-#         ydoc.awareness.set_local_state_field("user", user_model)
-        
-#         # Create global awareness state with user, current, and documents fields
-#         global_state = {
-#             "user": user_model,
-#             "current": current,
-#             "documents": documents
-#         }
-        
-#         print(f"DEBUG: set_user_awareness setting global awareness state: {global_state}")
-        
-#         # Set the global awareness state
-#         global_awareness.set_local_state(global_state)
-        
-#         print("DEBUG: set_user_awareness completed successfully")
-#         return f"Successfully set user awareness for {display_name} ({username}) in notebook {file_path} with current='{current}' and {len(documents)} documents"
-        
-#     except Exception as e:
-#         print(f"ERROR: set_user_awareness failed for {file_path}, username={username}: {str(e)}")
-#         return f"Error setting user awareness: {str(e)}"
-
-
 toolkit = Toolkit(
     name="notebook_toolkit",
     description="Tools for reading and manipulating Jupyter notebooks.",
 )
 toolkit.add_tool(Tool(callable=read_notebook, read=True))
-# toolkit.add_tool(Tool(callable=write_to_cell, read=True, write=True))
 toolkit.add_tool(Tool(callable=read_cell, read=True))
 toolkit.add_tool(Tool(callable=add_cell, read=True, write=True))
 toolkit.add_tool(Tool(callable=insert_cell, read=True, write=True))

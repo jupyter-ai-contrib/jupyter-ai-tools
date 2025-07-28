@@ -2,15 +2,16 @@
 Unit tests for the write_to_cell_collaboratively function and its helper functions.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-import asyncio
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
+
 from jupyter_ai_tools.toolkits.notebook import (
-    write_to_cell_collaboratively,
     _handle_delete_operation,
     _handle_insert_operation,
     _handle_replace_operation,
     _safe_set_cursor,
+    write_to_cell_collaboratively,
 )
 
 

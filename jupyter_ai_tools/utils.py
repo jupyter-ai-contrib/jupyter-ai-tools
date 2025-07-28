@@ -1,9 +1,11 @@
-from jupyter_server.serverapp import ServerApp
-from pycrdt import Awareness
-import inspect
 import functools
+import inspect
 import typing
 from typing import Optional
+
+from jupyter_server.serverapp import ServerApp
+from jupyter_server.auth.identity import User
+from pycrdt import Awareness
 
 
 async def get_serverapp():
@@ -63,7 +65,7 @@ async def get_file_id(file_path: str) -> str:
     return file_id
 
 
-def collaborative_tool(user: typing.Optional[typing.Dict[str, typing.Any]] = None):
+def collaborative_tool(user: User):
     """
     Decorator factory to enable collaborative awareness for toolkit functions.
     
@@ -95,8 +97,13 @@ def collaborative_tool(user: typing.Optional[typing.Dict[str, typing.Any]] = Non
         @functools.wraps(tool_func)
         async def wrapper(*args, **kwargs):
             # Skip awareness if no user provided
-            if user is None:
-                return await tool_func(*args, **kwargs)
+            
+            # Get serverapp for logging
+            try:
+                serverapp = await get_serverapp()
+                logger = serverapp.log
+            except Exception:
+                logger = None
             
             # Extract file_path from tool function arguments for notebook-specific awareness
             file_path = None
@@ -112,24 +119,24 @@ def collaborative_tool(user: typing.Optional[typing.Dict[str, typing.Any]] = Non
                     # Look for file_path parameter
                     if 'file_path' in param_names and len(args) > param_names.index('file_path'):
                         file_path = args[param_names.index('file_path')]
-                
-                # Set notebook-specific collaborative awareness if we have a file_path
-                if file_path and file_path.endswith('.ipynb'):
-                    try:
-                        file_id = await get_file_id(file_path)
-                        ydoc = await get_jupyter_ydoc(file_id)
-                        
-                        if ydoc:
-                            # Set the local user field in the notebook's awareness
-                            ydoc.awareness.set_local_state_field("user", user)
-                            
-                    except Exception:
-                        # Log but don't block tool execution
-                        pass
-                        
-            except Exception:
-                # Catch any errors in file_path detection
-                pass
+            except Exception as e:
+                # Log error in file_path detection
+                if logger:
+                    logger.warning(f"Error detecting file_path in collaborative_tool: {e}")
+            
+            # Set notebook-specific collaborative awareness if we have a file_path
+            if file_path and file_path.endswith('.ipynb'):
+                try:
+                    file_id = await get_file_id(file_path)
+                    ydoc = await get_jupyter_ydoc(file_id)
+                    
+                    if ydoc:
+                        # Set the local user field in the notebook's awareness
+                        ydoc.awareness.set_local_state_field("user", user)
+                except Exception as e:
+                    # Log error but don't block tool execution
+                    if logger:
+                        logger.warning(f"Error setting notebook awareness in collaborative_tool: {e}")
             
             # Set global awareness
             try:
@@ -140,9 +147,10 @@ def collaborative_tool(user: typing.Optional[typing.Dict[str, typing.Any]] = Non
                         "current": file_path or "",
                         "documents": [file_path] if file_path else []
                     })
-            except Exception:
-                # Log but don't block tool execution
-                pass
+            except Exception as e:
+                # Log error but don't block tool execution
+                if logger:
+                    logger.warning(f"Error setting global awareness in collaborative_tool: {e}")
             
             # Execute the original tool function
             return await tool_func(*args, **kwargs)
