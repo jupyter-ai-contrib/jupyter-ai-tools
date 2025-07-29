@@ -36,7 +36,7 @@ ______________________________________________________________________
 
 ## 🔧 Creating Collaborative Tools
 
-For developers building AI tools that need collaborative awareness, `jupyter_ai_tools` provides a `collaborative_tool` decorator that automatically enables real-time collaboration features:
+For developers building AI tools that need collaborative awareness, `jupyter_ai_tools` provides a `collaborative_tool` decorator that automatically enables real-time collaboration features.
 
 This decorator enables other users in the same Jupyter environment to see when your AI tool is actively working on shared notebooks, improving the collaborative experience.
 
