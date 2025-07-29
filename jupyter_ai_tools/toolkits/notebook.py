@@ -13,6 +13,7 @@ from ..utils import (
     cell_to_md,
     get_file_id,
     get_jupyter_ydoc,
+    normalize_filepath,
     notebook_json_to_md,
 )
 
@@ -70,6 +71,7 @@ async def read_notebook(file_path: str, include_outputs=False) -> str:
         The notebook content as a markdown string.
     """
     try:
+        file_path = normalize_filepath(file_path)
         notebook_dict = await read_notebook_json(file_path)
         notebook_md = notebook_json_to_md(notebook_dict, include_outputs=include_outputs)
         return notebook_md
@@ -91,6 +93,7 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
         A dictionary containing the complete notebook structure.
     """
     try:
+        file_path = normalize_filepath(file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             notebook_dict = json.load(f)
             return notebook_dict
@@ -120,6 +123,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         LookupError: If no cell with the given ID is found.
     """
     try:
+        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
@@ -150,6 +154,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         LookupError: If no cell with the given ID is found.
     """
     try:
+        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
         notebook_json = await read_notebook_json(file_path)
@@ -182,7 +187,7 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         or if the cell does not have an ID.
     """
     try:
-        
+        file_path = normalize_filepath(file_path)
         cell_id = None
         notebook_json = await read_notebook_json(file_path)
         cells = notebook_json["cells"]
@@ -233,7 +238,7 @@ async def add_cell(
         None
     """
     try:
-        
+        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id) if cell_id else None
         
@@ -304,7 +309,7 @@ async def insert_cell(
         None
     """
     try:
-        
+        file_path = normalize_filepath(file_path)
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
 
@@ -357,7 +362,7 @@ async def delete_cell(file_path: str, cell_id: str):
         None
     """
     try:
-        
+        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
         
@@ -762,7 +767,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
         ValueError: If the cell_id is not found in the notebook.
     """
     try:
-        
+        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
         
@@ -814,7 +819,7 @@ def read_cell_nbformat(file_path: str, cell_id: str) -> Dict[str, Any]:
     Raises:
         ValueError: If no cell with the given ID is found.
     """
-
+    file_path = normalize_filepath(file_path)
     with open(file_path, "r", encoding="utf-8") as f:
         notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 

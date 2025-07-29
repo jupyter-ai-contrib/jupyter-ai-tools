@@ -1,18 +1,70 @@
 import functools
 import inspect
+import os
 import typing
+from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote
 
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.auth.identity import User
 from pycrdt import Awareness
 
 
-async def get_serverapp():
+def get_serverapp():
     """Returns the server app from the request context"""
 
     server = ServerApp.instance()
     return server
+
+
+def normalize_filepath(file_path: str) -> str:
+    """
+    Normalizes a file path for Jupyter applications to return an absolute path.
+    
+    Handles various input formats:
+    - Relative paths from current working directory
+    - URL-encoded relative paths (common in Jupyter contexts)
+    - Absolute paths (returned as-is after normalization)
+    
+    Args:
+        file_path: Path in any of the supported formats
+        
+    Returns:
+        Absolute path to the file
+        
+    Example:
+        >>> normalize_filepath("notebooks/my%20notebook.ipynb")
+        "/current/working/dir/notebooks/my notebook.ipynb"
+        >>> normalize_filepath("/absolute/path/file.ipynb")
+        "/absolute/path/file.ipynb"
+        >>> normalize_filepath("relative/file.ipynb")
+        "/current/working/dir/relative/file.ipynb"
+    """
+    if not file_path or not file_path.strip():
+        raise ValueError("file_path cannot be empty")
+    
+    # URL decode the path in case it contains encoded characters
+    decoded_path = unquote(file_path)
+    
+    # Convert to Path object for easier manipulation
+    path = Path(decoded_path)
+    
+    # If already absolute, just normalize and return
+    if path.is_absolute():
+        return str(path.resolve())
+    
+    # For relative paths, get the Jupyter server's root directory
+    try:
+        serverapp = get_serverapp()
+        root_dir = serverapp.root_dir
+    except Exception:
+        # Fallback to current working directory if server app is not available
+        root_dir = os.getcwd()
+    
+    # Resolve relative path against the root directory
+    resolved_path = Path(root_dir) / path
+    return str(resolved_path.resolve())
 
 
 async def get_jupyter_ydoc(file_id: str):
@@ -24,7 +76,7 @@ async def get_jupyter_ydoc(file_id: str):
     Returns:
         `YNotebook` ydoc for the notebook
     """
-    serverapp = await get_serverapp()
+    serverapp = get_serverapp()
     yroom_manager = serverapp.web_app.settings["yroom_manager"]
     room_id = f"json:notebook:{file_id}"
 
@@ -35,7 +87,7 @@ async def get_jupyter_ydoc(file_id: str):
 
 
 async def get_global_awareness() -> Optional[Awareness]:
-    serverapp = await get_serverapp()
+    serverapp = get_serverapp()
     yroom_manager = serverapp.web_app.settings["yroom_manager"]
     
     room_id = "JupyterLab:globalAwareness" 
@@ -57,10 +109,11 @@ async def get_file_id(file_path: str) -> str:
     Returns:
         The file ID of the document
     """
-
-    serverapp = await get_serverapp()
+    normalized_file_path = normalize_filepath(file_path)
+    
+    serverapp = get_serverapp()
     file_id_manager = serverapp.web_app.settings["file_id_manager"]
-    file_id = file_id_manager.get_id(file_path)
+    file_id = file_id_manager.get_id(normalized_file_path)
 
     return file_id
 
@@ -100,7 +153,7 @@ def collaborative_tool(user: User):
             
             # Get serverapp for logging
             try:
-                serverapp = await get_serverapp()
+                serverapp = get_serverapp()
                 logger = serverapp.log
             except Exception:
                 logger = None
