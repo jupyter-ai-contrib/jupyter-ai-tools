@@ -34,6 +34,35 @@ These tools are ideal for agents that assist users with code editing, version co
 
 ______________________________________________________________________
 
+## 🔧 Creating Collaborative Tools
+
+For developers building AI tools that need collaborative awareness, `jupyter_ai_tools` provides a `collaborative_tool` decorator that automatically enables real-time collaboration features.
+
+This decorator enables other users in the same Jupyter environment to see when your AI tool is actively working on shared notebooks, improving the collaborative experience.
+
+```python
+from jupyter_ai_tools.utils import collaborative_tool
+
+# Define user information
+user_info = {
+    "name": "Alice",
+    "color": "var(--jp-collaborator-color1)",
+    "display_name": "Alice Smith"
+}
+
+# Apply collaborative awareness to your tool
+@collaborative_tool(user=user_info)
+async def my_notebook_tool(file_path: str, content: str):
+    """Your tool implementation here"""
+    # Tool automatically sets user awareness for:
+    # - Global awareness system (all users can see Alice is active)
+    # - Notebook-specific awareness (for .ipynb files)
+    return f"Processed {file_path}"
+```
+
+
+______________________________________________________________________
+
 ## Requirements
 
 - Jupyter Server

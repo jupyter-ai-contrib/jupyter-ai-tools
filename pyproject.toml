@@ -30,7 +30,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "pytest>=7.0",
-  "pytest-jupyter[server]>=0.6"
+  "pytest-jupyter[server]>=0.6",
+  "pytest-asyncio"
 ]
 lint = [
   "black>=22.6.0",

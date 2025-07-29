@@ -1,4 +1,11 @@
+import functools
+import inspect
+import typing
+from typing import Optional
+
 from jupyter_server.serverapp import ServerApp
+from jupyter_server.auth.identity import User
+from pycrdt import Awareness
 
 
 async def get_serverapp():
@@ -27,6 +34,19 @@ async def get_jupyter_ydoc(file_id: str):
         return notebook
 
 
+async def get_global_awareness() -> Optional[Awareness]:
+    serverapp = await get_serverapp()
+    yroom_manager = serverapp.web_app.settings["yroom_manager"]
+    
+    room_id = "JupyterLab:globalAwareness" 
+    if yroom_manager.has_room(room_id):
+        yroom = yroom_manager.get_room(room_id)
+        return yroom.get_awareness()
+    
+    # Return None if room doesn't exist
+    return None
+
+
 async def get_file_id(file_path: str) -> str:
     """Returns the file_id for the document
 
@@ -43,6 +63,100 @@ async def get_file_id(file_path: str) -> str:
     file_id = file_id_manager.get_id(file_path)
 
     return file_id
+
+
+def collaborative_tool(user: User):
+    """
+    Decorator factory to enable collaborative awareness for toolkit functions.
+    
+    This decorator automatically sets up user awareness in the global
+    and notebook-specific awareness systems when functions are called.
+    It enables real-time collaborative features by making the user's
+    presence visible to other users in the same Jupyter environment.
+    
+    Args:
+        user: Optional user dictionary with user information. If None, no awareness is set.
+              Should contain keys like 'name', 'color', 'display_name', etc.
+    
+    Returns:
+        Decorator function that wraps the target function with collaborative awareness.
+        
+    Example:
+        >>> user_info = {
+        ...     "name": "Alice",
+        ...     "color": "var(--jp-collaborator-color1)",
+        ...     "display_name": "Alice Smith"
+        ... }
+        >>> 
+        >>> @collaborative_tool(user=user_info)
+        ... async def my_notebook_tool(file_path: str, content: str):
+        ...     # Your tool implementation here
+        ...     return f"Processed {file_path}"
+    """
+    def decorator(tool_func):
+        @functools.wraps(tool_func)
+        async def wrapper(*args, **kwargs):
+            # Skip awareness if no user provided
+            
+            # Get serverapp for logging
+            try:
+                serverapp = await get_serverapp()
+                logger = serverapp.log
+            except Exception:
+                logger = None
+            
+            # Extract file_path from tool function arguments for notebook-specific awareness
+            file_path = None
+            try:
+                # Try to find file_path in kwargs first
+                if 'file_path' in kwargs:
+                    file_path = kwargs['file_path']
+                else:
+                    # Try to find file_path in positional args by inspecting the function signature
+                    sig = inspect.signature(tool_func)
+                    param_names = list(sig.parameters.keys())
+                    
+                    # Look for file_path parameter
+                    if 'file_path' in param_names and len(args) > param_names.index('file_path'):
+                        file_path = args[param_names.index('file_path')]
+            except Exception as e:
+                # Log error in file_path detection
+                if logger:
+                    logger.warning(f"Error detecting file_path in collaborative_tool: {e}")
+            
+            # Set notebook-specific collaborative awareness if we have a file_path
+            if file_path and file_path.endswith('.ipynb'):
+                try:
+                    file_id = await get_file_id(file_path)
+                    ydoc = await get_jupyter_ydoc(file_id)
+                    
+                    if ydoc:
+                        # Set the local user field in the notebook's awareness
+                        ydoc.awareness.set_local_state_field("user", user)
+                except Exception as e:
+                    # Log error but don't block tool execution
+                    if logger:
+                        logger.warning(f"Error setting notebook awareness in collaborative_tool: {e}")
+            
+            # Set global awareness
+            try:
+                g_awareness = await get_global_awareness()
+                if g_awareness:
+                    g_awareness.set_local_state({
+                        "user": user,
+                        "current": file_path or "",
+                        "documents": [file_path] if file_path else []
+                    })
+            except Exception as e:
+                # Log error but don't block tool execution
+                if logger:
+                    logger.warning(f"Error setting global awareness in collaborative_tool: {e}")
+            
+            # Execute the original tool function
+            return await tool_func(*args, **kwargs)
+        
+        return wrapper
+    return decorator
 
 
 def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> str:
