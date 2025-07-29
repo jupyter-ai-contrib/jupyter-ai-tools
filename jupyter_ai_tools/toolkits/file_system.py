@@ -8,6 +8,8 @@ from typing import List, Optional
 
 from jupyter_ai.tools.models import Tool, Toolkit
 
+from ..utils import normalize_filepath
+
 
 def read(file_path: str, offset: Optional[int] = None, limit: Optional[int] = None) -> str:
     """Reads a file from the local filesystem
@@ -21,6 +23,7 @@ def read(file_path: str, offset: Optional[int] = None, limit: Optional[int] = No
         The contents of the file, potentially with line numbers
     """
     try:
+        file_path = normalize_filepath(file_path)
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
 
@@ -73,6 +76,7 @@ def write(file_path: str, content: str) -> str:
         A success message or error message
     """
     try:
+        file_path = normalize_filepath(file_path)
         # Ensure the directory exists
         directory = os.path.dirname(file_path)
         if directory and not os.path.exists(directory):
@@ -107,6 +111,7 @@ def edit(file_path: str, old_string: str, new_string: str, replace_all: bool = F
         A success message or error message
     """
     try:
+        file_path = normalize_filepath(file_path)
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
 
@@ -159,6 +164,7 @@ async def search_and_replace(
         A success message or error message
     """
     try:
+        file_path = normalize_filepath(file_path)
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
 
@@ -212,7 +218,7 @@ async def glob(pattern: str, path: Optional[str] = None) -> str:
         A list of matching file paths sorted by modification time
     """
     try:
-        search_path = path or os.getcwd()
+        search_path = normalize_filepath(path) if path else os.getcwd()
         if not os.path.exists(search_path):
             return f"Error: Path not found: {search_path}"
 
@@ -260,7 +266,7 @@ async def grep(
         A list of file paths with at least one match
     """
     try:
-        search_path = path or os.getcwd()
+        search_path = normalize_filepath(path) if path else os.getcwd()
         if not os.path.exists(search_path):
             return [f"Error: Path not found: {search_path}"]
 
@@ -312,6 +318,7 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
         A list of files and directories in the given path
     """
     try:
+        path = normalize_filepath(path)
         if not os.path.exists(path):
             return f"Error: Path not found: {path}"
 
