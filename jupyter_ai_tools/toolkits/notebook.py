@@ -1,6 +1,7 @@
 import asyncio
 import difflib
 import json
+import os
 import re
 from typing import Any, Dict, Literal, Optional, Tuple
 
@@ -911,6 +912,44 @@ def _determine_insert_index(cells_count: int, cell_index: Optional[int], add_abo
     return insert_index
 
 
+async def create_notebook(file_path: str) -> str:
+    """Creates a new empty Jupyter notebook at the specified file path.
+
+    This function creates a new empty notebook with proper nbformat structure.
+    If the file already exists, it will return an error message.
+
+    Args:
+        file_path:
+            The path where the new notebook should be created.
+
+    Returns:
+        A success message or error message.
+    """
+    try:
+        file_path = normalize_filepath(file_path)
+        
+        # Check if file already exists
+        if os.path.exists(file_path):
+            return f"Error: File already exists at {file_path}"
+        
+        # Ensure the directory exists
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        
+        # Create a new empty notebook
+        notebook = nbformat.v4.new_notebook()
+        
+        # Write the notebook to the file
+        with open(file_path, "w", encoding="utf-8") as f:
+            nbformat.write(notebook, f)
+        
+        return f"Successfully created new notebook at {file_path}"
+        
+    except Exception as e:
+        return f"Error: Failed to create notebook: {str(e)}"
+
+
 
 toolkit = Toolkit(
     name="notebook_toolkit",
@@ -923,3 +962,4 @@ toolkit.add_tool(Tool(callable=insert_cell, read=True, write=True))
 toolkit.add_tool(Tool(callable=delete_cell, delete=True))
 toolkit.add_tool(Tool(callable=edit_cell, read=True, write=True))
 toolkit.add_tool(Tool(callable=get_cell_id_from_index, read=True))
+toolkit.add_tool(Tool(callable=create_notebook, write=True))
