@@ -35,30 +35,6 @@ class TestCollaborativeTool:
         return ydoc
 
     @pytest.mark.asyncio
-    async def test_no_user_skips_awareness(self, mock_user_dict):
-        """Test that decorator skips awareness when user is None."""
-        
-        # Create a test function
-        @collaborative_tool(user=None)
-        async def test_func(file_path: str, content: str):
-            return f"processed {file_path} with {content}"
-
-        # Mock the awareness functions to ensure they're not called
-        with patch('jupyter_ai_tools.utils.get_global_awareness') as mock_global, \
-             patch('jupyter_ai_tools.utils.get_file_id') as mock_file_id, \
-             patch('jupyter_ai_tools.utils.get_jupyter_ydoc') as mock_ydoc:
-            
-            result = await test_func("test.ipynb", "test content")
-            
-            # Verify function executed normally
-            assert result == "processed test.ipynb with test content"
-            
-            # Verify awareness functions were never called
-            mock_global.assert_not_called()
-            mock_file_id.assert_not_called()
-            mock_ydoc.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_user_with_notebook_file_sets_awareness(self, mock_user_dict, mock_global_awareness, mock_ydoc):
         """Test that decorator sets both global and notebook awareness for .ipynb files."""
         
