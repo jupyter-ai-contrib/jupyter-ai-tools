@@ -24,8 +24,9 @@ def _is_uuid_like(value: str) -> bool:
     if not isinstance(value, str):
         return False
     # UUID v4 pattern: 8-4-4-4-12 hexadecimal characters
-    uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    uuid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     return bool(re.match(uuid_pattern, value, re.IGNORECASE))
+
 
 def _is_index_like(value: str) -> bool:
     """Check if a string looks like a numeric index"""
@@ -36,6 +37,7 @@ def _is_index_like(value: str) -> bool:
         return True
     except ValueError:
         return False
+
 
 async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
     """
@@ -54,6 +56,7 @@ async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
     else:
         # Assume it's a cell_id and let the downstream function handle validation
         return cell_id_or_index
+
 
 async def read_notebook(file_path: str, include_outputs=False) -> str:
     """Returns the complete notebook content as markdown string.
@@ -160,13 +163,13 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
         notebook_json = await read_notebook_json(file_path)
         cell_index = _get_cell_index_from_id_json(notebook_json, resolved_cell_id)
-        
+
         if cell_index is not None and 0 <= cell_index < len(notebook_json["cells"]):
             cell = notebook_json["cells"][cell_index]
             return cell, cell_index
-        
+
         raise LookupError(f"No cell found with {cell_id=}")
-        
+
     except Exception:
         raise
 
@@ -192,7 +195,7 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         cell_id = None
         notebook_json = await read_notebook_json(file_path)
         cells = notebook_json["cells"]
-        
+
         if 0 <= cell_index < len(cells):
             cell_id = cells[cell_index].get("id")
         else:
@@ -202,7 +205,7 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
             raise ValueError("No cell_id found, use `insert_cell` based on cell index")
 
         return cell_id
-        
+
     except Exception:
         raise
 
@@ -242,15 +245,17 @@ async def add_cell(
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id) if cell_id else None
-        
+
         file_id = await get_file_id(file_path)
         ydoc: YNotebook = await get_jupyter_ydoc(file_id)
 
         if ydoc:
             cells_count = ydoc.cell_number
-            cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id) if resolved_cell_id else None
+            cell_index = (
+                _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id) if resolved_cell_id else None
+            )
             insert_index = _determine_insert_index(cells_count, cell_index, add_above)
-            
+
             cell = {
                 "cell_type": cell_type,
                 "source": "",
@@ -266,19 +271,25 @@ async def add_cell(
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 
             cells_count = len(notebook.cells)
-            cell_index = _get_cell_index_from_id_nbformat(notebook, resolved_cell_id) if resolved_cell_id else None
+            cell_index = (
+                _get_cell_index_from_id_nbformat(notebook, resolved_cell_id)
+                if resolved_cell_id
+                else None
+            )
             insert_index = _determine_insert_index(cells_count, cell_index, add_above)
 
             if cell_type == "code":
                 notebook.cells.insert(insert_index, nbformat.v4.new_code_cell(source=content or ""))
             elif cell_type == "markdown":
-                notebook.cells.insert(insert_index, nbformat.v4.new_markdown_cell(source=content or ""))
+                notebook.cells.insert(
+                    insert_index, nbformat.v4.new_markdown_cell(source=content or "")
+                )
             else:
                 notebook.cells.insert(insert_index, nbformat.v4.new_raw_cell(source=content or ""))
 
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
-            
+
     except Exception:
         raise
 
@@ -316,7 +327,7 @@ async def insert_cell(
 
         if ydoc:
             cells_count = ydoc.cell_number
-            
+
             cell = {
                 "cell_type": cell_type,
                 "source": "",
@@ -336,13 +347,15 @@ async def insert_cell(
             if cell_type == "code":
                 notebook.cells.insert(insert_index, nbformat.v4.new_code_cell(source=content or ""))
             elif cell_type == "markdown":
-                notebook.cells.insert(insert_index, nbformat.v4.new_markdown_cell(source=content or ""))
+                notebook.cells.insert(
+                    insert_index, nbformat.v4.new_markdown_cell(source=content or "")
+                )
             else:
                 notebook.cells.insert(insert_index, nbformat.v4.new_raw_cell(source=content or ""))
 
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
-            
+
     except Exception:
         raise
 
@@ -366,10 +379,10 @@ async def delete_cell(file_path: str, cell_id: str):
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
-        
+
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
-        
+
         if ydoc:
             cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
             if cell_index is not None and 0 <= cell_index < len(ydoc.ycells):
@@ -390,27 +403,29 @@ async def delete_cell(file_path: str, cell_id: str):
 
         if cell_index is None:
             raise ValueError(f"Could not find cell index for {cell_id=}")
-            
+
     except Exception:
         raise
 
 
-def get_cursor_details(cell_source: Text, start_index: int, stop_index: Optional[int] = None) -> Dict[str, Any]:
+def get_cursor_details(
+    cell_source: Text, start_index: int, stop_index: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Creates cursor details for collaborative notebook cursor positioning.
-    
+
     This function constructs the cursor details object required by the YNotebook
     awareness system to show cursor positions in collaborative editing environments.
     It handles both single cursor positions and text selections.
-    
+
     Args:
         cell_source: The YText source object representing the cell content
         start_index: The starting position of the cursor (0-based index)
         stop_index: The ending position for selections (optional)
-    
+
     Returns:
         dict: Cursor details object with head, anchor, and selection state
-        
+
     Example:
         >>> details = get_cursor_details(cell_source, 10)  # Single cursor at position 10
         >>> details = get_cursor_details(cell_source, 5, 15)  # Selection from 5 to 15
@@ -418,57 +433,59 @@ def get_cursor_details(cell_source: Text, start_index: int, stop_index: Optional
     # Create sticky index for the head position (where cursor starts)
     head_sticky_index = cell_source.sticky_index(start_index, Assoc.BEFORE)
     head_sticky_index_data = head_sticky_index.to_json()
-    
+
     # Initialize cursor details with default values
     cursor_details: Dict[str, Any] = {"primary": True, "empty": True}
-    
+
     # Set the head position (where cursor starts)
     cursor_details["head"] = {
         "type": head_sticky_index_data["item"],
-        "tname": None, 
+        "tname": None,
         "item": head_sticky_index_data["item"],
-        "assoc": 0
+        "assoc": 0,
     }
-    
+
     # By default, anchor is same as head (no selection)
     cursor_details["anchor"] = cursor_details["head"]
-    
+
     # If stop_index is provided, create a selection
     if stop_index is not None:
         anchor_sticky_index = cell_source.sticky_index(stop_index, Assoc.BEFORE)
         anchor_sticky_index_data = anchor_sticky_index.to_json()
         cursor_details["anchor"] = {
             "type": anchor_sticky_index_data["item"],
-            "tname": None, 
+            "tname": None,
             "item": anchor_sticky_index_data["item"],
-            "assoc": 0
+            "assoc": 0,
         }
         cursor_details["empty"] = False  # Not empty when there's a selection
-    
+
     return cursor_details
 
 
-def set_cursor_in_ynotebook(ynotebook: YNotebook, cell_source: Text, start_index: int, stop_index: Optional[int] = None) -> None:
+def set_cursor_in_ynotebook(
+    ynotebook: YNotebook, cell_source: Text, start_index: int, stop_index: Optional[int] = None
+) -> None:
     """
     Sets the cursor position in a collaborative notebook environment.
-    
+
     This function updates the cursor position in the YNotebook awareness system,
     which allows other collaborators to see where the cursor is positioned.
     It handles both single cursor positions and text selections.
-    
+
     Args:
         ynotebook: The YNotebook instance representing the collaborative notebook
         cell_source: The YText source object representing the cell content
         start_index: The starting position of the cursor (0-based index)
         stop_index: The ending position for selections (optional)
-    
+
     Returns:
         None: This function does not return a value
-        
+
     Note:
         This function silently ignores any errors that occur during cursor setting
         to avoid breaking the main collaborative editing operations.
-        
+
     Example:
         >>> set_cursor_in_ynotebook(ynotebook, cell_source, 10)  # Set cursor at position 10
         >>> set_cursor_in_ynotebook(ynotebook, cell_source, 5, 15)  # Select text from 5 to 15
@@ -476,7 +493,7 @@ def set_cursor_in_ynotebook(ynotebook: YNotebook, cell_source: Text, start_index
     try:
         # Get cursor details for the specified position/selection
         details = get_cursor_details(cell_source, start_index, stop_index=stop_index)
-        
+
         # Update the awareness system with the cursor position
         if ynotebook.awareness:
             ynotebook.awareness.set_local_state_field("cursors", [details])
@@ -486,38 +503,40 @@ def set_cursor_in_ynotebook(ynotebook: YNotebook, cell_source: Text, start_index
         pass
 
 
-async def write_to_cell_collaboratively(ynotebook, ycell, content: str, typing_speed: float = 0.1) -> bool:
+async def write_to_cell_collaboratively(
+    ynotebook, ycell, content: str, typing_speed: float = 0.1
+) -> bool:
     """
     Writes content to a Jupyter notebook cell with collaborative typing simulation.
-    
+
     This function provides a collaborative writing experience by applying text changes
     incrementally with visual feedback. It uses a diff-based approach to compute the
     minimal set of changes needed and applies them with cursor positioning and timing
     delays to simulate natural typing behavior.
-    
+
     The function handles three types of operations:
     - Delete: Removes text with visual highlighting
     - Insert: Adds text word-by-word with typing delays
     - Replace: Combines delete and insert operations
-    
+
     Args:
         ynotebook: The YNotebook instance representing the collaborative notebook
         ycell: The YCell instance representing the specific cell to modify
         content: The new content to write to the cell
         typing_speed: Delay in seconds between typing operations (default: 0.1)
-    
+
     Returns:
         bool: True if the operation completed successfully
-    
+
     Raises:
         ValueError: If ynotebook/ycell is None or typing_speed is negative
         TypeError: If content is not a string
         RuntimeError: If cell content extraction or writing fails
-        
+
     Example:
         >>> # Write with default typing speed
         >>> success = await write_to_cell_collaboratively(ynotebook, ycell, "print('Hello')")
-        >>> 
+        >>>
         >>> # Write with custom typing speed (faster)
         >>> success = await write_to_cell_collaboratively(
         ...     ynotebook, ycell, "print('World')", typing_speed=0.05
@@ -532,26 +551,26 @@ async def write_to_cell_collaboratively(ynotebook, ycell, content: str, typing_s
         raise TypeError("content must be a string")
     if typing_speed < 0:
         raise ValueError("typing_speed must be non-negative")
-    
+
     try:
         # Extract current cell content
         cell = ycell.to_py()
         old_content = cell.get("source", "")
         cell_source = ycell["source"]  # YText object for collaborative editing
         new_content = content
-        
+
         # Early return if content is unchanged
         if old_content == new_content:
             return True
-            
+
     except Exception as e:
         raise RuntimeError(f"Failed to extract cell content: {e}")
-    
+
     try:
         # Compute the minimal set of changes needed using difflib
         sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
         cursor_position = 0
-        
+
         # Set initial cursor position
         _safe_set_cursor(ynotebook, cell_source, cursor_position)
 
@@ -560,7 +579,7 @@ async def write_to_cell_collaboratively(ynotebook, ycell, content: str, typing_s
             if operation == "equal":
                 # No changes needed for this segment, just advance cursor
                 cursor_position += old_end - old_start
-                
+
             elif operation == "delete":
                 # Remove text with visual feedback
                 delete_length = old_end - old_start
@@ -568,65 +587,87 @@ async def write_to_cell_collaboratively(ynotebook, ycell, content: str, typing_s
                     ynotebook, cell_source, cursor_position, delete_length, typing_speed
                 )
                 # Cursor stays at same position after deletion
-                
+
             elif operation == "insert":
                 # Add text with typing simulation
                 cursor_position = await _handle_insert_operation(
-                    ynotebook, cell_source, cursor_position, new_content, new_start, new_end, typing_speed
+                    ynotebook,
+                    cell_source,
+                    cursor_position,
+                    new_content,
+                    new_start,
+                    new_end,
+                    typing_speed,
                 )
-                
+
             elif operation == "replace":
                 # Combine delete and insert operations
                 delete_length = old_end - old_start
                 cursor_position = await _handle_replace_operation(
-                    ynotebook, cell_source, cursor_position, new_content, 
-                    delete_length, new_start, new_end, typing_speed
+                    ynotebook,
+                    cell_source,
+                    cursor_position,
+                    new_content,
+                    delete_length,
+                    new_start,
+                    new_end,
+                    typing_speed,
                 )
-        
+
         # Set final cursor position at the end of the content
         _safe_set_cursor(ynotebook, cell_source, cursor_position)
-        
+
         return True
-        
+
     except Exception as e:
         raise RuntimeError(f"Failed to write cell content collaboratively: {e}")
 
 
-async def _handle_delete_operation(ynotebook, cell_source, cursor_position: int, delete_length: int, typing_speed: float) -> None:
+async def _handle_delete_operation(
+    ynotebook, cell_source, cursor_position: int, delete_length: int, typing_speed: float
+) -> None:
     """
     Handle deletion of text chunks with visual feedback.
-    
+
     This function provides visual feedback during deletion by first highlighting
     the text to be deleted, then removing it after a delay to simulate natural
     deletion behavior in collaborative environments.
-    
+
     Args:
         ynotebook: The YNotebook instance for cursor positioning
         cell_source: The YText source object representing the cell content
         cursor_position: Current cursor position in the text
         delete_length: Number of characters to delete from cursor position
         typing_speed: Base delay between operations in seconds
-    
+
     Returns:
         None
     """
     # Highlight the text chunk that will be deleted (visual feedback)
     _safe_set_cursor(ynotebook, cell_source, cursor_position, cursor_position + delete_length)
     await asyncio.sleep(min(0.3, typing_speed * 3))  # Cap highlight duration at 0.3s
-    
+
     # Perform the actual deletion
-    del cell_source[cursor_position:cursor_position + delete_length]
+    del cell_source[cursor_position : cursor_position + delete_length]
     await asyncio.sleep(typing_speed)
 
 
-async def _handle_insert_operation(ynotebook, cell_source, cursor_position: int, new_content: str, new_start: int, new_end: int, typing_speed: float) -> int:
+async def _handle_insert_operation(
+    ynotebook,
+    cell_source,
+    cursor_position: int,
+    new_content: str,
+    new_start: int,
+    new_end: int,
+    typing_speed: float,
+) -> int:
     """
     Handle insertion of text with word-by-word typing simulation.
-    
+
     This function simulates natural typing behavior by inserting text word-by-word
     with appropriate delays and cursor positioning. It handles both regular text
     and whitespace-only content appropriately.
-    
+
     Args:
         ynotebook: The YNotebook instance for cursor positioning
         cell_source: The YText source object representing the cell content
@@ -635,13 +676,13 @@ async def _handle_insert_operation(ynotebook, cell_source, cursor_position: int,
         new_start: Start index of text to insert in the new content
         new_end: End index of text to insert in the new content
         typing_speed: Base delay between typing operations in seconds
-    
+
     Returns:
         int: The new cursor position after insertion
     """
     text_to_insert = new_content[new_start:new_end]
     words = text_to_insert.split()
-    
+
     # Handle whitespace-only or empty insertions
     if not words or text_to_insert.strip() == "":
         cell_source.insert(cursor_position, text_to_insert)
@@ -649,47 +690,56 @@ async def _handle_insert_operation(ynotebook, cell_source, cursor_position: int,
         _safe_set_cursor(ynotebook, cell_source, cursor_position)
         await asyncio.sleep(typing_speed)
         return cursor_position
-    
+
     # Insert text word-by-word with proper spacing and punctuation
     current_pos = 0
     for word in words:
         # Find the position of this word in the text
         word_start = text_to_insert.find(word, current_pos)
-        
+
         # Insert any whitespace or punctuation before the word
         if word_start > current_pos:
             prefix = text_to_insert[current_pos:word_start]
             cell_source.insert(cursor_position, prefix)
             cursor_position += len(prefix)
-        
+
         # Insert the word itself
         cell_source.insert(cursor_position, word)
         cursor_position += len(word)
         current_pos = word_start + len(word)
-        
+
         # Update cursor position and pause for typing effect
         _safe_set_cursor(ynotebook, cell_source, cursor_position)
         await asyncio.sleep(typing_speed)
-    
+
     # Insert any remaining text after the last word (punctuation, etc.)
     if current_pos < len(text_to_insert):
         suffix = text_to_insert[current_pos:]
         cell_source.insert(cursor_position, suffix)
         cursor_position += len(suffix)
         _safe_set_cursor(ynotebook, cell_source, cursor_position)
-    
+
     return cursor_position
 
 
-async def _handle_replace_operation(ynotebook, cell_source, cursor_position: int, new_content: str, delete_length: int, new_start: int, new_end: int, typing_speed: float) -> int:
+async def _handle_replace_operation(
+    ynotebook,
+    cell_source,
+    cursor_position: int,
+    new_content: str,
+    delete_length: int,
+    new_start: int,
+    new_end: int,
+    typing_speed: float,
+) -> int:
     """
     Handle replacement operations by deleting then inserting.
-    
+
     This function simulates natural text replacement behavior by first deleting
     the old text (with visual feedback) and then inserting the new text with
     typing simulation. A pause is added between operations to make the replacement
     feel more natural.
-    
+
     Args:
         ynotebook: The YNotebook instance for cursor positioning
         cell_source: The YText source object representing the cell content
@@ -699,40 +749,46 @@ async def _handle_replace_operation(ynotebook, cell_source, cursor_position: int
         new_start: Start index of replacement text in the new content
         new_end: End index of replacement text in the new content
         typing_speed: Base delay between typing operations in seconds
-    
+
     Returns:
         int: The new cursor position after replacement
     """
     # First, delete the old text with visual feedback
-    await _handle_delete_operation(ynotebook, cell_source, cursor_position, delete_length, typing_speed)
-    
+    await _handle_delete_operation(
+        ynotebook, cell_source, cursor_position, delete_length, typing_speed
+    )
+
     # Brief pause between deletion and insertion for natural feel
     await asyncio.sleep(typing_speed * 2)
-    
+
     # Then, insert the new text with typing simulation
-    cursor_position = await _handle_insert_operation(ynotebook, cell_source, cursor_position, new_content, new_start, new_end, typing_speed)
-    
+    cursor_position = await _handle_insert_operation(
+        ynotebook, cell_source, cursor_position, new_content, new_start, new_end, typing_speed
+    )
+
     return cursor_position
 
 
-def _safe_set_cursor(ynotebook: YNotebook, cell_source: Text, cursor_position: int, stop_cursor: Optional[int] = None) -> None:
+def _safe_set_cursor(
+    ynotebook: YNotebook, cell_source: Text, cursor_position: int, stop_cursor: Optional[int] = None
+) -> None:
     """
     Safely set cursor position with error handling.
-    
+
     This function wraps the cursor positioning logic to prevent errors from
     breaking the main collaborative writing operations. Since cursor positioning
     is a visual enhancement rather than a core functionality, errors are silently
     ignored to maintain robustness.
-    
+
     Args:
         ynotebook: The YNotebook instance for cursor positioning
         cell_source: The YText source object representing the cell content
         cursor_position: The cursor position to set
         stop_cursor: Optional end position for text selections
-    
+
     Returns:
         None
-        
+
     Note:
         This function silently ignores all exceptions to prevent cursor
         positioning errors from interfering with the main editing operations.
@@ -771,7 +827,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
-        
+
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
 
@@ -793,7 +849,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
                     nbformat.write(notebook, f)
             else:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
-                
+
     except Exception:
         raise
 
@@ -927,28 +983,27 @@ async def create_notebook(file_path: str) -> str:
     """
     try:
         file_path = normalize_filepath(file_path)
-        
+
         # Check if file already exists
         if os.path.exists(file_path):
             return f"Error: File already exists at {file_path}"
-        
+
         # Ensure the directory exists
         directory = os.path.dirname(file_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
-        
+
         # Create a new empty notebook
         notebook = nbformat.v4.new_notebook()
-        
+
         # Write the notebook to the file
         with open(file_path, "w", encoding="utf-8") as f:
             nbformat.write(notebook, f)
-        
+
         return f"Successfully created new notebook at {file_path}"
-        
+
     except Exception as e:
         return f"Error: Failed to create notebook: {str(e)}"
-
 
 
 toolkit = Toolkit(
