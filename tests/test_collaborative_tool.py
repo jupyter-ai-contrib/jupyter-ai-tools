@@ -176,7 +176,9 @@ class TestCollaborativeTool:
             "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
         ), patch(
             "jupyter_ai_tools.utils.get_file_id", side_effect=Exception("File ID error")
-        ), patch("jupyter_ai_tools.utils.get_jupyter_ydoc") as mock_ydoc:
+        ), patch(
+            "jupyter_ai_tools.utils.get_jupyter_ydoc"
+        ) as mock_ydoc:
             # Function should still execute despite notebook awareness error
             result = await test_func("test.ipynb")
 
@@ -320,7 +322,7 @@ class TestCollaborativeTool:
 
             # Verify function executed with all parameters
             assert (
-                "processed first, test.py, ('extra1', 'extra2'), {'key1': 'value1', 'key2': 'value2'}" # noqa: E501
+                "processed first, test.py, ('extra1', 'extra2'), {'key1': 'value1', 'key2': 'value2'}"  # noqa: E501
                 in result
             )
 
