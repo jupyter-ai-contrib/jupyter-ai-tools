@@ -7,7 +7,7 @@ __version__ = "0.2.1"
 
 __all__ = [
     "fs_toolkit",
-    "codeexec_toolkit", 
+    "codeexec_toolkit",
     "git_toolkit",
     "notebook_toolkit",
 ]
