@@ -10,9 +10,6 @@ __all__ = [
     "codeexec_toolkit", 
     "git_toolkit",
     "notebook_toolkit",
-    "__version__",
-    "_jupyter_server_extension_points",
-    "_load_jupyter_server_extension"
 ]
 
 
