@@ -4,6 +4,8 @@ import os
 from jupyter_ai.tools.models import Tool, Toolkit
 from jupyterlab_git.git import Git
 
+from ..utils import normalize_filepath
+
 git = Git()
 
 
@@ -19,6 +21,7 @@ async def git_clone(path: str, url: str) -> str:
     Returns:
         str: Success or error message.
     """
+    path = normalize_filepath(path)
     res = await git.clone(path, repo_url=url)
     if res["code"] == 0:
         return f"✅ Cloned repo into {res['path']}"
@@ -36,6 +39,7 @@ async def git_status(path: str) -> str:
     Returns:
         str: A JSON-formatted string of status or an error message.
     """
+    path = normalize_filepath(path)
     res = await git.status(path)
     if res["code"] == 0:
         return f"📋 Status:\n{json.dumps(res, indent=2)}"
@@ -54,6 +58,7 @@ async def git_log(path: str, history_count: int = 10) -> str:
     Returns:
         str: A JSON-formatted commit log or error message.
     """
+    path = normalize_filepath(path)
     res = await git.log(path, history_count=history_count)
     if res["code"] == 0:
         return f"🕓 Recent commits:\n{json.dumps(res, indent=2)}"
@@ -71,6 +76,7 @@ async def git_pull(path: str) -> str:
     Returns:
         str: Success or error message.
     """
+    path = normalize_filepath(path)
     res = await git.pull(path)
     return (
         "✅ Pulled latest changes."
@@ -91,6 +97,7 @@ async def git_push(path: str, branch: str) -> str:
     Returns:
         str: Success or error message.
     """
+    path = normalize_filepath(path)
     res = await git.push(remote="origin", branch=branch, path=path)
     return (
         "✅ Pushed changes."
@@ -111,6 +118,7 @@ async def git_commit(path: str, message: str) -> str:
     Returns:
         str: Success or error message.
     """
+    path = normalize_filepath(path)
     res = await git.commit(commit_msg=message, amend=False, path=path)
     return (
         "✅ Commit successful."
@@ -132,6 +140,7 @@ async def git_add(path: str, add_all: bool = True, filename: str = "") -> str:
     Returns:
         str: Success or error message.
     """
+    path = normalize_filepath(path)
     if add_all:
         res = await git.add_all(path)
     elif filename:
@@ -158,6 +167,7 @@ async def git_get_repo_root(path: str) -> str:
     Returns:
         str: The path to the Git repository root or an error message.
     """
+    path = normalize_filepath(path)
     dir_path = os.path.dirname(path)
     res = await git.show_top_level(dir_path)
     if res["code"] == 0 and res.get("path"):
