@@ -4,8 +4,6 @@ import asyncio
 import shlex
 from typing import Optional
 
-from jupyter_ai.tools.models import Tool, Toolkit
-
 
 async def bash(command: str, timeout: Optional[int] = None) -> str:
     """Executes a bash command and returns the result
@@ -40,8 +38,6 @@ async def bash(command: str, timeout: Optional[int] = None) -> str:
         return f"Command timed out after {timeout} seconds"
 
 
-toolkit = Toolkit(
-    name="code_execution_toolkit",
-    description="Tools to execute code in different environments.",
-)
-toolkit.add_tool(Tool(callable=bash, execute=True))
+toolkit = [
+    bash,
+]

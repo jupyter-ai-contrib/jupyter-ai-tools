@@ -6,7 +6,6 @@ import re
 from typing import Any, Dict, Literal, Optional, Tuple
 
 import nbformat
-from jupyter_ai.tools.models import Tool, Toolkit
 from jupyter_ydoc import YNotebook
 from pycrdt import Assoc, Text
 
@@ -1006,15 +1005,13 @@ async def create_notebook(file_path: str) -> str:
         return f"Error: Failed to create notebook: {str(e)}"
 
 
-toolkit = Toolkit(
-    name="notebook_toolkit",
-    description="Tools for reading and manipulating Jupyter notebooks.",
-)
-toolkit.add_tool(Tool(callable=read_notebook, read=True))
-toolkit.add_tool(Tool(callable=read_cell, read=True))
-toolkit.add_tool(Tool(callable=add_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=insert_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=delete_cell, delete=True))
-toolkit.add_tool(Tool(callable=edit_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=get_cell_id_from_index, read=True))
-toolkit.add_tool(Tool(callable=create_notebook, write=True))
+toolkit = [
+    read_notebook,
+    read_cell,
+    add_cell,
+    insert_cell,
+    delete_cell,
+    edit_cell,
+    get_cell_id_from_index,
+    create_notebook,
+]
