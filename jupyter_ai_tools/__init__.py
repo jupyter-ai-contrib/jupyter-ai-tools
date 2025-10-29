@@ -12,6 +12,7 @@ __all__ = [
     "nb_toolkit",
 ]
 
+
 def _jupyter_server_extension_points():
     return [{"module": "jupyter_ai_tools"}]
 
