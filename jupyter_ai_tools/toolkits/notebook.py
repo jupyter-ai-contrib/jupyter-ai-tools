@@ -211,8 +211,8 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
 
 async def add_cell(
     file_path: str,
-    content: str | None = None,
-    cell_id: str | None = None,
+    content: Optional[str] = None,
+    cell_id: Optional[str] = None,
     add_above: bool = False,
     cell_type: Literal["code", "markdown", "raw"] = "code",
 ):
@@ -295,8 +295,8 @@ async def add_cell(
 
 async def insert_cell(
     file_path: str,
-    content: str | None = None,
-    insert_index: int | None = None,
+    content: Optional[str] = None,
+    insert_index: Optional[int] = None,
     cell_type: Literal["code", "markdown", "raw"] = "code",
 ):
     """Inserts a new cell to the Jupyter notebook at the specified cell index.
@@ -887,7 +887,7 @@ def read_cell_nbformat(file_path: str, cell_id: str) -> Dict[str, Any]:
         raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
 
 
-def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> int | None:
+def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id by notebook json dict.
 
     Args:
@@ -905,7 +905,7 @@ def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> int | None:
     return None
 
 
-def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> int | None:
+def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id using YDoc interface.
 
     Args:
@@ -924,7 +924,7 @@ def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> int | None:
         return None
 
 
-def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> int | None:
+def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id using nbformat interface.
 
     Args:

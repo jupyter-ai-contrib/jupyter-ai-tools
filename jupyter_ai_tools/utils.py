@@ -2,7 +2,7 @@ import functools
 import inspect
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 from urllib.parse import unquote
 
 from jupyter_server.auth.identity import User
@@ -269,7 +269,7 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
     return "\n\n".join(md_parts)
 
 
-def metadata_to_md(metadata_json: dict) -> str:
+def metadata_to_md(metadata_json: Dict) -> str:
     """Converts notebook or cell metadata to markdown string in YAML format.
 
     Args:
@@ -339,7 +339,7 @@ def cell_to_md(cell_json: dict, index: int = 0, include_outputs: bool = True) ->
     return "\n\n".join(md_parts)
 
 
-def format_outputs(outputs: list) -> str:
+def format_outputs(outputs: List) -> str:
     """Formats cell outputs into markdown.
 
     Args:
