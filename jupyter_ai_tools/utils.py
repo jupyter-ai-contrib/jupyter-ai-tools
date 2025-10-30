@@ -2,7 +2,7 @@ import functools
 import inspect
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import unquote
 
 from jupyter_server.auth.identity import User
