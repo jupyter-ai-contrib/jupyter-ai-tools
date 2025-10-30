@@ -2,12 +2,20 @@ import functools
 import inspect
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import unquote
 
 from jupyter_server.auth.identity import User
 from jupyter_server.serverapp import ServerApp
 from pycrdt import Awareness
+
+JSD_PRESENT = False
+try:
+    import jupyter_server_documents
+
+    JSD_PRESENT = True
+except ImportError:
+    pass
 
 
 def get_serverapp():
@@ -66,6 +74,18 @@ def normalize_filepath(file_path: str) -> str:
     return str(resolved_path.resolve())
 
 
+async def get_room(room_id: str):
+    """Returns the yroom."""
+
+    serverapp = get_serverapp()
+    if JSD_PRESENT:
+        manager = serverapp.web_app.settings["yroom_manager"]
+        return manager.get_room(room_id) if manager.has_room(room_id) else None
+    else:
+        manager = serverapp.web_app.settings["jupyter_server_ydoc"].ywebsocket_server
+        return await manager.get_room(room_id) if manager.room_exists(room_id) else None
+
+
 async def get_jupyter_ydoc(file_id: str):
     """Returns the notebook ydoc
 
@@ -75,27 +95,31 @@ async def get_jupyter_ydoc(file_id: str):
     Returns:
         `YNotebook` ydoc for the notebook
     """
-    serverapp = get_serverapp()
-    yroom_manager = serverapp.web_app.settings["yroom_manager"]
     room_id = f"json:notebook:{file_id}"
+    yroom = await get_room(room_id)
+    if not yroom:
+        return
 
-    if yroom_manager.has_room(room_id):
-        yroom = yroom_manager.get_room(room_id)
-        notebook = await yroom.get_jupyter_ydoc()
-        return notebook
+    if JSD_PRESENT:
+        return await yroom.get_jupyter_ydoc()
+    else:
+        return yroom._document
 
 
 async def get_global_awareness() -> Optional[Awareness]:
-    serverapp = get_serverapp()
-    yroom_manager = serverapp.web_app.settings["yroom_manager"]
+    """Returns the global awareness object for JupyterLab collaboration.
 
-    room_id = "JupyterLab:globalAwareness"
-    if yroom_manager.has_room(room_id):
-        yroom = yroom_manager.get_room(room_id)
+    Returns:
+        Awareness instance for global collaboration, or None if not available
+    """
+    yroom = await get_room("JupyterLab:globalAwareness")
+    if not yroom:
+        return
+
+    if JSD_PRESENT:
         return yroom.get_awareness()
-
-    # Return None if room doesn't exist
-    return None
+    else:
+        return yroom.awareness
 
 
 async def get_file_id(file_path: str) -> str:

@@ -22,8 +22,7 @@ classifiers = [
 
 dependencies = [
   "jupyter_server>=1.6,<3",
-  "jupyterlab_git",
-  "jupyter_server_documents>=0.1.a8"
+  "jupyterlab_git"
 ]
 
 
