@@ -11,7 +11,7 @@ from pycrdt import Awareness
 
 JSD_PRESENT = False
 try:
-    import jupyter_server_documents
+    import jupyter_server_documents  # noqa: F401
 
     JSD_PRESENT = True
 except ImportError:
@@ -114,7 +114,7 @@ async def get_global_awareness() -> Optional[Awareness]:
     """
     yroom = await get_room("JupyterLab:globalAwareness")
     if not yroom:
-        return
+        return None
 
     if JSD_PRESENT:
         return yroom.get_awareness()
