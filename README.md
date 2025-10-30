@@ -10,25 +10,41 @@ ______________________________________________________________________
 
 This extension provides runtime-discoverable tools compatible with OpenAI-style function calling or MCP tool schemas. These tools can be invoked by agents to:
 
-### 🧠 YNotebook Tools
+### 📁 File System Tools (`fs_toolkit`)
 
-- `read_cell`: Return the full content of a cell by index
-- `read_notebook`: Return all cells as a JSON-formatted list
-- `add_cell`: Insert a blank cell at a specific index
-- `delete_cell`: Remove a cell and return its contents
-- `write_to_cell`: Overwrite the content of a cell with new source
-- `get_max_cell_index`: Return the last valid cell index
+- `read`: Read file contents from the filesystem
+- `edit`: Edit file contents with search and replace functionality
+- `write`: Write content to a file
+- `search_and_replace`: Search and replace text patterns in files
+- `glob`: Find files matching a glob pattern
+- `grep`: Search for text patterns within file contents
+- `ls`: List directory contents
 
-### 🌀 Git Tools
+### 🧠 Notebook Tools (`nb_toolkit`)
 
-- `git_clone`: Clone a Git repo into a given path
-- `git_status`: Get the working tree status
+- `read_notebook`: Read entire notebook contents as markdown
+- `read_cell`: Read a specific notebook cell by index
+- `add_cell`: Add a new cell to a notebook
+- `insert_cell`: Insert a cell at a specific index in the notebook
+- `delete_cell`: Remove a cell from the notebook
+- `edit_cell`: Modify a cell's content
+- `get_cell_id_from_index`: Get cell ID from its index position
+- `create_notebook`: Create a new Jupyter notebook
+
+### 🌀 Git Tools (`git_toolkit`)
+
+- `git_clone`: Clone a Git repository to a specified path
+- `git_status`: Get the current working tree status
 - `git_log`: View recent commit history
-- `git_add`: Stage files (individually or all)
+- `git_pull`: Pull changes from remote repository
+- `git_push`: Push local changes to remote branch
 - `git_commit`: Commit staged changes with a message
-- `git_push`: Push local changes to a remote branch
-- `git_pull`: Pull remote updates
-- `git_get_repo_root_from_notebookpath`: Find the Git root from a notebook path
+- `git_add`: Stage files for commit (individually or all)
+- `git_get_repo_root`: Get the root directory of the Git repository
+
+### ⚙️ Code Execution Tools (`exec_toolkit`)
+
+- `bash`: Execute bash commands in the system shell
 
 These tools are ideal for agents that assist users with code editing, version control, or dynamic notebook interaction.
 

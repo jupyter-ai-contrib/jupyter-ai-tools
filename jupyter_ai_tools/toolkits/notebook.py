@@ -6,7 +6,6 @@ import re
 from typing import Any, Dict, Literal, Optional, Tuple
 
 import nbformat
-from jupyter_ai.tools.models import Tool, Toolkit
 from jupyter_ydoc import YNotebook
 from pycrdt import Assoc, Text
 
@@ -212,8 +211,8 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
 
 async def add_cell(
     file_path: str,
-    content: str | None = None,
-    cell_id: str | None = None,
+    content: Optional[str] = None,
+    cell_id: Optional[str] = None,
     add_above: bool = False,
     cell_type: Literal["code", "markdown", "raw"] = "code",
 ):
@@ -296,8 +295,8 @@ async def add_cell(
 
 async def insert_cell(
     file_path: str,
-    content: str | None = None,
-    insert_index: int | None = None,
+    content: Optional[str] = None,
+    insert_index: Optional[int] = None,
     cell_type: Literal["code", "markdown", "raw"] = "code",
 ):
     """Inserts a new cell to the Jupyter notebook at the specified cell index.
@@ -888,7 +887,7 @@ def read_cell_nbformat(file_path: str, cell_id: str) -> Dict[str, Any]:
         raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
 
 
-def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> int | None:
+def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id by notebook json dict.
 
     Args:
@@ -906,7 +905,7 @@ def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> int | None:
     return None
 
 
-def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> int | None:
+def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id using YDoc interface.
 
     Args:
@@ -925,7 +924,7 @@ def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> int | None:
         return None
 
 
-def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> int | None:
+def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> Optional[int]:
     """Get cell index from cell_id using nbformat interface.
 
     Args:
@@ -1006,15 +1005,13 @@ async def create_notebook(file_path: str) -> str:
         return f"Error: Failed to create notebook: {str(e)}"
 
 
-toolkit = Toolkit(
-    name="notebook_toolkit",
-    description="Tools for reading and manipulating Jupyter notebooks.",
-)
-toolkit.add_tool(Tool(callable=read_notebook, read=True))
-toolkit.add_tool(Tool(callable=read_cell, read=True))
-toolkit.add_tool(Tool(callable=add_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=insert_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=delete_cell, delete=True))
-toolkit.add_tool(Tool(callable=edit_cell, read=True, write=True))
-toolkit.add_tool(Tool(callable=get_cell_id_from_index, read=True))
-toolkit.add_tool(Tool(callable=create_notebook, write=True))
+toolkit = [
+    read_notebook,
+    read_cell,
+    add_cell,
+    insert_cell,
+    delete_cell,
+    edit_cell,
+    get_cell_id_from_index,
+    create_notebook,
+]

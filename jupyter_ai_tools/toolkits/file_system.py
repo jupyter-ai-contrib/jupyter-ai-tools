@@ -6,8 +6,6 @@ import glob as glob_module
 import os
 from typing import List, Optional
 
-from jupyter_ai.tools.models import Tool, Toolkit
-
 from ..utils import normalize_filepath
 
 
@@ -356,14 +354,12 @@ async def ls(path: str, ignore: Optional[List[str]] = None) -> str:
         return f"Error: Failed to list directory: {str(e)}"
 
 
-toolkit = Toolkit(
-    name="file_system_toolkit",
-    description="Tools to do search, list, read, write and edit operations on files.",
-)
-toolkit.add_tool(Tool(callable=read, read=True))
-toolkit.add_tool(Tool(callable=edit, read=True, write=True))
-toolkit.add_tool(Tool(callable=write, write=True))
-toolkit.add_tool(Tool(callable=search_and_replace, read=True, write=True))
-toolkit.add_tool(Tool(callable=glob, read=True))
-toolkit.add_tool(Tool(callable=grep, read=True))
-toolkit.add_tool(Tool(callable=ls, read=True))
+toolkit = [
+    read,
+    edit,
+    write,
+    search_and_replace,
+    glob,
+    grep,
+    ls,
+]
