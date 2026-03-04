@@ -102,4 +102,4 @@ dmypy.json
 .DS_Store
 
 # Auto-generated _version.py module
-jupyter_ai_magic_commands/_version.py
+jupyter_ai_tools/_version.py
