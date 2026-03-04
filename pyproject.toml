@@ -6,8 +6,8 @@ build-backend = "hatchling.build"
 name = "jupyter_ai_tools"
 description = "A suite of tools for AI agents in Jupyter"
 authors = [
-  { name = "Abigayle Mercer", email = "abigaylemercer@gmail.com" },
   { name = "Project Jupyter", email = "jupyter@googlegroups.com" },
+  { name = "Abigayle Mercer", email = "abigaylemercer@gmail.com" },
 ]
 dynamic = ["version"]
 readme = "README.md"
