@@ -1,6 +1,6 @@
 # jupyter_ai_tools
 
-[![Github Actions Status](https://github.com/Abigayle-Mercer/jupyter-ai-tools/workflows/Build/badge.svg)](https://github.com/Abigayle-Mercer/jupyter-ai-tools/actions/workflows/build.yml)
+[![Github Actions Status](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/workflows/Build/badge.svg)](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/actions/workflows/build.yml)
 
 **`jupyter_ai_tools`** is a Jupyter Server extension that exposes a collection of powerful, agent-friendly tools for interacting with notebooks and Git repositories. It is designed for use by AI personas (like those in Jupyter AI) to programmatically modify notebooks, manage code cells, and interact with version control systems.
 

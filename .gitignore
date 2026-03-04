@@ -100,3 +100,6 @@ dmypy.json
 
 # OSX files
 .DS_Store
+
+# Auto-generated _version.py module
+jupyter_ai_tools/_version.py

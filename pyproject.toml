@@ -4,20 +4,24 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jupyter_ai_tools"
-authors = [{name = "Abigayle Mercer", email = "abigaylemercer@gmail.com"}]
+description = "A suite of tools for AI agents in Jupyter"
+authors = [
+  { name = "Project Jupyter", email = "jupyter@googlegroups.com" },
+  { name = "Abigayle Mercer", email = "abigaylemercer@gmail.com" },
+]
 dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = ["Jupyter", "Extension"]
 classifiers = [
-    "License :: OSI Approved :: BSD License",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Framework :: Jupyter",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Framework :: Jupyter",
 ]
 
 dependencies = [
@@ -29,27 +33,23 @@ dependencies = [
 
 
 [project.optional-dependencies]
-test = [
-  "pytest>=7.0",
-  "pytest-jupyter[server]>=0.6",
-  "pytest-asyncio"
-]
+test = ["pytest>=7.0", "pytest-jupyter[server]>=0.6", "pytest-asyncio"]
 lint = [
   "black>=22.6.0",
   "ruff>=0.0.156",
   "mypy>=0.990",
   "mdformat>=0.7.16",
-  "mdformat-gfm>=0.3.5",    
+  "mdformat-gfm>=0.3.5",
   "types-jsonschema",
-  "pydantic>=1.10"
+  "pydantic>=1.10",
 ]
 typing = ["mypy>=0.990"]
 
 [project.license]
-file="LICENSE"
+file = "LICENSE"
 
 [project.urls]
-Home = "https://github.com/Abigayle-Mercer/jupyter-ai-tools"
+Home = "https://github.com/jupyter-ai-contrib/jupyter-ai-tools"
 
 [project.entry-points."jupyter_server.extension"]
 jupyter_ai_tools = "jupyter_ai_tools"
