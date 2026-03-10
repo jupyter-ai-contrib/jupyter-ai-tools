@@ -1,9 +1,10 @@
 import asyncio
 import difflib
+from functools import lru_cache
 import json
 import os
 import re
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import nbformat
 from jupyter_ydoc import YNotebook
@@ -12,6 +13,7 @@ from pycrdt import Assoc, Text
 from ..utils import (
     cell_to_md,
     get_file_id,
+    get_global_awareness,
     get_jupyter_ydoc,
     normalize_filepath,
     notebook_json_to_md,
@@ -55,6 +57,140 @@ async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
     else:
         # Assume it's a cell_id and let the downstream function handle validation
         return cell_id_or_index
+
+
+def clean_text(text: Union[str, list, None]) -> Optional[str]:
+    """Clean and format text output.
+
+    Args:
+        text: Text data that might be string, list, or None
+
+    Returns:
+        Cleaned text string or None
+    """
+    if text is None:
+        return None
+    if isinstance(text, list):
+        return "".join(str(item) for item in text)
+    return str(text)
+
+
+def process_notebook_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process a Jupyter notebook cell output into a standardized format.
+
+    Args:
+        output_data: Raw output data from notebook cell
+
+    Returns:
+        Processed output dictionary with standardized format
+    """
+    output_type = output_data.get("output_type")
+
+    if output_type == "stream":
+        return {"output_type": output_type, "text": clean_text(output_data.get("text", ""))}
+
+    elif output_type in ["execute_result", "display_data"]:
+        data = output_data.get("data", {})
+        return {
+            "output_type": output_type,
+            "text": clean_text(data.get("text/plain")),
+            "image": extract_image_data(data) if data else None,
+        }
+
+    elif output_type == "error":
+        error_text = f"{output_data.get('ename', '')}: {output_data.get('evalue', '')}\n{chr(10).join(output_data.get('traceback', []))}"
+        return {"output_type": output_type, "text": clean_text(error_text)}
+
+    return output_data
+
+
+def extract_image_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract image data from notebook output data.
+
+    Args:
+        data: Output data dictionary that may contain various MIME types
+
+    Returns:
+        Extracted image data or None
+    """
+    for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/svg+xml"]:
+        if mime_type in data:
+            return {"mime_type": mime_type, "data": data[mime_type]}
+    return None
+
+
+def format_notebook_cell(cell_data: Dict[str, Any], cell_index: int, language: str, include_full_outputs: bool = False) -> Dict[str, Any]:
+    """Format a Jupyter notebook cell into a standardized format.
+
+    Args:
+        cell_data: Raw cell data from notebook JSON
+        cell_index: Index of the cell in the notebook
+        language: Programming language of the notebook
+        include_full_outputs: Whether to include full outputs or truncate large ones
+    """
+    cell_id = cell_data.get("id", f"cell-{cell_index}")
+
+    formatted_cell = {
+        "cellType": cell_data["cell_type"],
+        "source": "".join(cell_data["source"]) if isinstance(cell_data["source"], list) else cell_data["source"],
+        "execution_count": cell_data.get("execution_count") if cell_data["cell_type"] == "code" else None,
+        "cell_id": cell_id,
+    }
+
+    if cell_data["cell_type"] == "code":
+        formatted_cell["language"] = language
+
+    if cell_data["cell_type"] == "code" and cell_data.get("outputs"):
+        processed_outputs = [process_notebook_output(output) for output in cell_data["outputs"]]
+
+        if not include_full_outputs and len(json.dumps(processed_outputs)) > 10000:
+            formatted_cell["outputs"] = [{
+                "output_type": "stream",
+                "text": f"Outputs are too large to include. Use command with: cat <notebook_path> | jq '.cells[{cell_index}].outputs'",
+            }]
+        else:
+            formatted_cell["outputs"] = processed_outputs
+
+    return formatted_cell
+
+
+async def read_notebook_cells(notebook_path: str, specific_cell_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Read and process cells from a Jupyter notebook file.
+
+    Args:
+        notebook_path: Path to the notebook file
+        specific_cell_id: Optional cell ID to return only that cell
+
+    Returns:
+        List of formatted cell dictionaries
+
+    Raises:
+        FileNotFoundError: If notebook file doesn't exist
+        ValueError: If specific cell ID is not found
+    """
+    resolved_path = normalize_filepath(notebook_path)
+
+    with open(resolved_path, "r", encoding="utf-8") as file:
+        notebook_data = json.load(file)
+
+    language = notebook_data.get("metadata", {}).get("language_info", {}).get("name", "python")
+
+    if specific_cell_id:
+        target_cell = None
+        cell_index = -1
+        for i, cell in enumerate(notebook_data["cells"]):
+            if cell.get("id") == specific_cell_id:
+                target_cell = cell
+                cell_index = i
+                break
+        if target_cell is None:
+            raise ValueError(f'Cell with ID "{specific_cell_id}" not found in notebook')
+        return [format_notebook_cell(target_cell, cell_index, language, include_full_outputs=True)]
+
+    return [
+        format_notebook_cell(cell, index, language, include_full_outputs=False)
+        for index, cell in enumerate(notebook_data["cells"])
+    ]
 
 
 async def read_notebook(file_path: str, include_outputs=False) -> str:
@@ -289,6 +425,7 @@ async def add_cell(
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
 
+        return None
     except Exception:
         raise
 
@@ -403,6 +540,7 @@ async def delete_cell(file_path: str, cell_id: str):
         if cell_index is None:
             raise ValueError(f"Could not find cell index for {cell_id=}")
 
+        return {"success": True}
     except Exception:
         raise
 
@@ -800,6 +938,152 @@ def _safe_set_cursor(
         pass
 
 
+async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
+    """Returns path for the currently active notebook.
+
+    Args:
+        username: Optional username to return a specific user's active notebook
+
+    Returns:
+        File path for the first active notebook. If username is provided, then
+        returns the active notebook for that specific user.
+    """
+    awareness = await get_global_awareness()
+    if not awareness:
+        return
+    for _, state in awareness.states.items():
+        _username = state.get("user", {}).get("username", None)
+        if username and username != _username:
+            continue
+
+        if (active_notebook := state.get("current")) and "notebook" in active_notebook:
+            return active_notebook.replace("notebook:", "")
+
+        if documents := state.get("documents"):
+            notebooks = [doc for doc in documents if doc.endswith('.ipynb')]
+            if len(notebooks) == 1:
+                return notebooks[0]
+
+
+def _get_active_cell_id_from_ydoc(ydoc: YNotebook, username: Optional[str] = None) -> Optional[str]:
+    """Internal helper: Returns the active cell id from a ydoc instance."""
+    if not ydoc or not ydoc.awareness:
+        return None
+
+    for _, state in ydoc.awareness.states.items():
+        _username = state.get("user", {}).get("username", None)
+        if username and username != _username:
+            continue
+
+        if active_cell_id := state.get("activeCellId"):
+            return active_cell_id
+
+    return None
+
+
+async def get_active_cell_id(notebook_path: str, username: Optional[str] = None) -> Optional[str]:
+    """Returns the active cell id.
+
+    Args:
+        notebook_path: Path to the notebook file
+        username: Optional username to return a specific user's active cell
+
+    Returns:
+        The active cell ID for the notebook, or None if no active cell found
+    """
+    file_path = normalize_filepath(notebook_path)
+    file_id = await get_file_id(file_path)
+    ydoc = await get_jupyter_ydoc(file_id)
+
+    return _get_active_cell_id_from_ydoc(ydoc, username)
+
+
+async def get_open_documents(username: Optional[str] = None) -> Optional[List[str]]:
+    """Returns all open documents for the user, excluding chat files.
+
+    Args:
+        username: Optional username to return a specific user's open documents
+
+    Returns:
+        List of file paths for all open documents (excluding .chat files).
+        Returns None if no documents are found or awareness is unavailable.
+    """
+    awareness = await get_global_awareness()
+    if not awareness:
+        return None
+
+    for _, state in awareness.states.items():
+        _username = state.get("user", {}).get("username", None)
+        if username and username != _username:
+            continue
+
+        if documents := state.get("documents"):
+            filtered_documents = [doc for doc in documents if not doc.endswith('.chat')]
+            return filtered_documents if filtered_documents else None
+
+    return None
+
+
+async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
+    """Selects a cell in the active notebook by navigating to it using cursor movements.
+
+    Args:
+        cell_id: The UUID of the cell to select, or a numeric index as string
+        username: Optional username to get the active cell for that specific user
+
+    Returns:
+        dict: A dictionary containing the response from the last cursor movement
+
+    Raises:
+        ValueError: If the cell_id is not found in the notebook
+        RuntimeError: If there is no active notebook or notebook is not currently open
+    """
+    from jupyterlab_commands_toolkit.tools import execute_command
+
+    try:
+        file_path = await get_active_notebook(username)
+        if not file_path:
+            raise RuntimeError("No active notebook found. Please open a notebook first.")
+
+        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+
+        file_id = await get_file_id(file_path)
+        ydoc = await get_jupyter_ydoc(file_id)
+
+        if not ydoc:
+            raise RuntimeError(f"Notebook at {file_path} is not currently open")
+
+        target_cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
+        if target_cell_index is None:
+            raise ValueError(f"Cell with ID {cell_id} not found in notebook")
+
+        active_cell_id = _get_active_cell_id_from_ydoc(ydoc, username)
+        if not active_cell_id:
+            raise RuntimeError("No active cell found. Make sure the notebook is focused.")
+
+        active_cell_index = _get_cell_index_from_id_ydoc(ydoc, active_cell_id)
+        if active_cell_index is None:
+            raise RuntimeError(f"Active cell {active_cell_id} not found in notebook")
+
+        distance = target_cell_index - active_cell_index
+
+        if distance == 0:
+            return {"success": True, "result": "Already at target cell"}
+
+        result = None
+        if distance > 0:
+            for _ in range(distance):
+                result = await execute_command("notebook:move-cursor-down")
+        else:
+            for _ in range(abs(distance)):
+                result = await execute_command("notebook:move-cursor-up")
+
+        return result
+
+    except Exception:
+        raise
+
+
 async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
     """Edits the content of a notebook cell with the specified ID
 
@@ -849,6 +1133,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
             else:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
 
+        return {"success": True}
     except Exception:
         raise
 
@@ -967,39 +1252,66 @@ def _determine_insert_index(cells_count: int, cell_index: Optional[int], add_abo
     return insert_index
 
 
-async def create_notebook(file_path: str) -> str:
-    """Creates a new empty Jupyter notebook at the specified file path.
+@lru_cache(maxsize=1)
+def list_available_kernelspecs():
+    """Lists all available Jupyter kernels and their details."""
+    from jupyter_client.kernelspec import KernelSpecManager
 
-    This function creates a new empty notebook with proper nbformat structure.
-    If the file already exists, it will return an error message.
+    ksm = KernelSpecManager()
+    kernels = ksm.find_kernel_specs()
+    specs = []
+    for kernel_name, _ in kernels.items():
+        try:
+            spec = ksm.get_kernel_spec(kernel_name)
+            specs.append({"name": kernel_name, "display_name": spec.display_name, "language": spec.language})
+        except Exception:
+            specs = [{"name": "python3", "display_name": "Python 3 (ipykernel)", "language": "python"}]
+    return specs
+
+
+async def create_notebook(file_path: str, kernel_name: str = None) -> str:
+    """Creates a new empty Jupyter notebook at the specified file path.
 
     Args:
         file_path:
             The path where the new notebook should be created.
+        kernel_name:
+            Optional kernel name to use (e.g. "python3"). If not provided,
+            uses the first available kernel.
 
     Returns:
         A success message or error message.
     """
     try:
+        from .jupyterlab import open_file
+
         file_path = normalize_filepath(file_path)
 
-        # Check if file already exists
         if os.path.exists(file_path):
-            return f"Error: File already exists at {file_path}"
+            raise FileExistsError(f"Notebook at path {file_path} already exists.")
 
-        # Ensure the directory exists
         directory = os.path.dirname(file_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
 
-        # Create a new empty notebook
         notebook = nbformat.v4.new_notebook()
 
-        # Write the notebook to the file
+        kernelspecs = list_available_kernelspecs()
+        if kernel_name:
+            spec = next((s for s in kernelspecs if s["name"] == kernel_name), None)
+            if not spec:
+                available = [s["name"] for s in kernelspecs]
+                raise ValueError(f"Kernel '{kernel_name}' not found. Available: {available}")
+        else:
+            spec = kernelspecs[0]
+
+        notebook["metadata"] = {"kernelspec": spec}
+
         with open(file_path, "w", encoding="utf-8") as f:
             nbformat.write(notebook, f)
 
-        return f"Successfully created new notebook at {file_path}"
+        await open_file(file_path)
+        return f"Successfully created and opened notebook: {file_path}"
 
     except Exception as e:
         return f"Error: Failed to create notebook: {str(e)}"
@@ -1007,11 +1319,16 @@ async def create_notebook(file_path: str) -> str:
 
 toolkit = [
     read_notebook,
+    read_notebook_cells,
     read_cell,
     add_cell,
     insert_cell,
     delete_cell,
     edit_cell,
+    select_cell,
     get_cell_id_from_index,
+    get_active_notebook,
+    get_active_cell_id,
+    get_open_documents,
     create_notebook,
 ]
