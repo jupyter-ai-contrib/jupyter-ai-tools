@@ -4,7 +4,7 @@ from functools import lru_cache
 import json
 import os
 import re
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import nbformat
 from jupyter_ydoc import YNotebook
@@ -59,8 +59,15 @@ async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
         return cell_id_or_index
 
 
-def clean_text(text):
-    """Clean and format text output."""
+def clean_text(text: Union[str, list, None]) -> Optional[str]:
+    """Clean and format text output.
+
+    Args:
+        text: Text data that might be string, list, or None
+
+    Returns:
+        Cleaned text string or None
+    """
     if text is None:
         return None
     if isinstance(text, list):
@@ -68,8 +75,15 @@ def clean_text(text):
     return str(text)
 
 
-def process_notebook_output(output_data):
-    """Process a Jupyter notebook cell output into a standardized format."""
+def process_notebook_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process a Jupyter notebook cell output into a standardized format.
+
+    Args:
+        output_data: Raw output data from notebook cell
+
+    Returns:
+        Processed output dictionary with standardized format
+    """
     output_type = output_data.get("output_type")
 
     if output_type == "stream":
@@ -90,16 +104,30 @@ def process_notebook_output(output_data):
     return output_data
 
 
-def extract_image_data(data):
-    """Extract image data from notebook output data."""
+def extract_image_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract image data from notebook output data.
+
+    Args:
+        data: Output data dictionary that may contain various MIME types
+
+    Returns:
+        Extracted image data or None
+    """
     for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/svg+xml"]:
         if mime_type in data:
             return {"mime_type": mime_type, "data": data[mime_type]}
     return None
 
 
-def format_notebook_cell(cell_data, cell_index, language, include_full_outputs=False):
-    """Format a Jupyter notebook cell into a standardized format."""
+def format_notebook_cell(cell_data: Dict[str, Any], cell_index: int, language: str, include_full_outputs: bool = False) -> Dict[str, Any]:
+    """Format a Jupyter notebook cell into a standardized format.
+
+    Args:
+        cell_data: Raw cell data from notebook JSON
+        cell_index: Index of the cell in the notebook
+        language: Programming language of the notebook
+        include_full_outputs: Whether to include full outputs or truncate large ones
+    """
     cell_id = cell_data.get("id", f"cell-{cell_index}")
 
     formatted_cell = {
@@ -397,7 +425,7 @@ async def add_cell(
             with open(file_path, "w", encoding="utf-8") as f:
                 nbformat.write(notebook, f)
 
-        return {"success": True}
+        return None
     except Exception:
         raise
 
