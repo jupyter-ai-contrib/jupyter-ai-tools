@@ -982,7 +982,10 @@ def _get_active_cell_id_from_ydoc(ydoc: YNotebook, username: Optional[str] = Non
 
 
 async def get_active_cell_id(notebook_path: str, username: Optional[str] = None) -> Optional[str]:
-    """Returns the active cell id.
+    """Returns the active (selected) cell ID without reading the full notebook.
+
+    Prefer this over reading the entire notebook when you only need the
+    currently selected cell's ID.
 
     Args:
         notebook_path: Path to the notebook file
@@ -1270,14 +1273,17 @@ def list_available_kernelspecs():
 
 
 async def create_notebook(file_path: str, kernel_name: str = None) -> str:
-    """Creates a new empty Jupyter notebook at the specified file path.
+    """Creates a new Jupyter notebook at the specified file path.
+
+    The new notebook starts with one empty default cell. Account for this
+    when adding cells.
 
     Args:
         file_path:
             The path where the new notebook should be created.
         kernel_name:
-            Optional kernel name to use (e.g. "python3"). If not provided,
-            uses the first available kernel.
+            Optional kernel name (e.g. "python3"). Defaults to the first
+            available kernel. Use "python3" for general-purpose notebooks.
 
     Returns:
         A success message or error message.

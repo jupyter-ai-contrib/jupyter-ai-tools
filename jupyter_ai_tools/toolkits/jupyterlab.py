@@ -42,12 +42,17 @@ async def open_file(file_path: str):
 async def run_all_cells(timeout: Optional[float] = None) -> dict:
     """Runs all cells in the currently active Jupyter notebook.
 
+    This does NOT return cell outputs. To inspect outputs after running,
+    call `read_notebook_cells`.
+
     Args:
         timeout: Max seconds to wait. None (default) waits until complete.
-                 If exceeded, returns early while cells continue running.
+                 If exceeded, returns early while cells continue running
+                 in the kernel — a timeout does NOT mean execution failed.
 
     Returns:
-        dict: The result from execution, or a timed_out message.
+        dict: {"result": true} on success, {"result": false} on error,
+              or {"status": "timed_out", ...} if timeout exceeded.
     """
     return await _run_with_timeout(
         execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
@@ -57,14 +62,19 @@ async def run_all_cells(timeout: Optional[float] = None) -> dict:
 async def run_cell(cell_id: str, username: Optional[str] = None, timeout: Optional[float] = None) -> dict:
     """Runs a specific cell in the active notebook by selecting it and executing it.
 
+    This does NOT return cell outputs. To inspect outputs after running,
+    call `read_notebook_cells` with the cell's ID.
+
     Args:
         cell_id: The UUID of the cell to run, or a numeric index as string
         username: Optional username to get the active cell for that specific user
         timeout: Max seconds to wait. None (default) waits until complete.
-                 If exceeded, returns early while the cell continues running.
+                 If exceeded, returns early while the cell continues running
+                 in the kernel — a timeout does NOT mean execution failed.
 
     Returns:
-        dict: The result from execution, or a timed_out message.
+        dict: {"result": true} on success, {"result": false} on error,
+              or {"status": "timed_out", ...} if timeout exceeded.
     """
     from .notebook import select_cell
 
