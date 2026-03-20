@@ -2,6 +2,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.4.1
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.4.0...3b905e981515c7b28d8caa9648ff6f4c9ffeddad))
+
+### Merged PRs
+
+- fix: improve steering for typical MCP tools to prevent agent confusion [#19](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/19) ([@joshuatowner](https://github.com/joshuatowner), [@andrii-i](https://github.com/andrii-i), [@bhavana-nair](https://github.com/bhavana-nair), [@dlqqq](https://github.com/dlqqq))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-03-11&to=2026-03-20&type=c))
+
+@andrii-i ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Aandrii-i+updated%3A2026-03-11..2026-03-20&type=Issues)) | @bhavana-nair ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Abhavana-nair+updated%3A2026-03-11..2026-03-20&type=Issues)) | @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-03-11..2026-03-20&type=Issues)) | @joshuatowner ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajoshuatowner+updated%3A2026-03-11..2026-03-20&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.4.0
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.3.0...812f13f13cfc0bd81a44fc4b195cca410e7f85d6))
@@ -18,8 +37,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-03-04&to=2026-03-11&type=c))
 
 @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-03-04..2026-03-11&type=Issues)) | @joshuatowner ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajoshuatowner+updated%3A2026-03-04..2026-03-11&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.3.0
 
