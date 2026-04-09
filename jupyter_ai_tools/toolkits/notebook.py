@@ -395,6 +395,9 @@ async def add_cell(
                 "cell_type": cell_type,
                 "source": "",
             }
+            if cell_type == "code":
+                cell["execution_count"] = None
+                cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
             if insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
@@ -468,6 +471,9 @@ async def insert_cell(
                 "cell_type": cell_type,
                 "source": "",
             }
+            if cell_type == "code":
+                cell["execution_count"] = None
+                cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
             if insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
