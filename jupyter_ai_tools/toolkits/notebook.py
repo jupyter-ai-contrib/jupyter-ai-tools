@@ -668,11 +668,17 @@ async def write_to_cell_collaboratively(
     ynotebook, ycell, content: str, typing_speed: float = 0.1
 ) -> bool:
     """
-    Writes content to a Jupyter notebook cell with diff-based typing simulation.
+    Writes content to a Jupyter notebook cell with collaborative typing simulation.
 
-    Applies a typing animation with cursor movement and timing delays. Not safe under
-    concurrent edits — stale position references may cause a panic in pycrdt's Rust layer.
-    Use the atomic inline replace (del + insert on the YText) for the default safe path.
+    This function provides a collaborative writing experience by applying text changes
+    incrementally with visual feedback. It uses a diff-based approach to compute the
+    minimal set of changes needed and applies them with cursor positioning and timing
+    delays to simulate natural typing behavior.
+
+    The function handles three types of operations:
+    - Delete: Removes text with visual highlighting
+    - Insert: Adds text word-by-word with typing delays
+    - Replace: Combines delete and insert operations
 
     Args:
         ynotebook: The YNotebook instance representing the collaborative notebook
@@ -687,6 +693,15 @@ async def write_to_cell_collaboratively(
         ValueError: If ynotebook/ycell is None or typing_speed is negative
         TypeError: If content is not a string
         RuntimeError: If cell content extraction or writing fails
+
+    Example:
+        >>> # Write with default typing speed
+        >>> success = await write_to_cell_collaboratively(ynotebook, ycell, "print('Hello')")
+        >>>
+        >>> # Write with custom typing speed (faster)
+        >>> success = await write_to_cell_collaboratively(
+        ...     ynotebook, ycell, "print('World')", typing_speed=0.05
+        ... )
     """
     # Input validation
     if ynotebook is None:
@@ -704,12 +719,13 @@ async def write_to_cell_collaboratively(
         old_content = cell.get("source", "")
         cell_source = ycell["source"]  # YText object for collaborative editing
         new_content = content
+
+        # Early return if content is unchanged
+        if old_content == new_content:
+            return True
+
     except Exception as e:
         raise RuntimeError(f"Failed to extract cell content: {e}")
-
-    # Early return if content is unchanged
-    if old_content == new_content:
-        return True
 
     try:
         # Compute the minimal set of changes needed using difflib
@@ -765,7 +781,7 @@ async def write_to_cell_collaboratively(
         return True
 
     except Exception as e:
-        raise RuntimeError(f"Failed to write cell content collaboratively in animation mode): {e}")
+        raise RuntimeError(f"Failed to write cell content collaboratively: {e}")
 
 
 async def _handle_delete_operation(
