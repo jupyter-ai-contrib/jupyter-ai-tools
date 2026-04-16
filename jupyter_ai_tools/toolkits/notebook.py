@@ -661,7 +661,7 @@ def _atomic_replace_cell_source(ycell, content: str) -> None:
         return
     cell_source = ycell["source"]
     cell_source.clear()
-    cell_source.insert(0, content)
+    cell_source += content
 
 
 async def write_to_cell_collaboratively(
