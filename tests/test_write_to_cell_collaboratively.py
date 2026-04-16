@@ -377,10 +377,10 @@ class TestAtomicReplace:
         self.mock_source.insert = Mock()
         self.mock_source.__delitem__ = Mock()
 
-    def test_atomic_replace_calls_delete_then_insert(self):
-        """del[0:len(old)] then insert(0, new) — correct args."""
+    def test_atomic_replace_calls_clear_then_insert(self):
+        """clear() then insert(0, new) — correct ops."""
         _atomic_replace_cell_source(self.mock_ycell, "new content")
-        self.mock_source.__delitem__.assert_called_once_with(slice(0, len("old content")))
+        self.mock_source.clear.assert_called_once()
         self.mock_source.insert.assert_called_once_with(0, "new content")
 
     def test_no_asyncio_sleep_called(self):
@@ -405,16 +405,16 @@ class TestAtomicReplace:
         assert str(source_text) == "new content"
 
     def test_atomic_replace_from_empty_cell(self):
-        """Write into a blank cell — del[0:0] is a no-op but insert must still run."""
+        """Write into a blank cell — clear is a no-op but insert must still run."""
         self.mock_ycell.to_py.return_value = {"source": ""}
         _atomic_replace_cell_source(self.mock_ycell, "hello")
-        self.mock_source.__delitem__.assert_called_once_with(slice(0, 0))
+        self.mock_source.clear.assert_called_once()
         self.mock_source.insert.assert_called_once_with(0, "hello")
 
     def test_atomic_replace_to_empty_cell(self):
-        """Clear a cell — delete runs, insert is called with empty string."""
+        """Clear a cell — clear runs, insert is called with empty string."""
         _atomic_replace_cell_source(self.mock_ycell, "")
-        self.mock_source.__delitem__.assert_called_once_with(slice(0, len("old content")))
+        self.mock_source.clear.assert_called_once()
         self.mock_source.insert.assert_called_once_with(0, "")
 
     def test_no_panic_on_real_ytext(self):

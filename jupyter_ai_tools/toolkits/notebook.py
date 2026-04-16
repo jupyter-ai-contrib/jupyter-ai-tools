@@ -655,12 +655,12 @@ def set_cursor_in_ynotebook(
 
 
 def _atomic_replace_cell_source(ycell, content: str) -> None:
-    """Atomically replaces cell source: del old content then insert new, no await between ops."""
+    """Atomically replaces cell source: clear then insert new, no await between ops."""
     old_content = ycell.to_py().get("source", "")
     if old_content == content:
         return
     cell_source = ycell["source"]
-    del cell_source[0:len(old_content)]
+    cell_source.clear()
     cell_source.insert(0, content)
 
 
