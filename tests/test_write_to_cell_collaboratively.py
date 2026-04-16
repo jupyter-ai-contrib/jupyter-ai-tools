@@ -366,68 +366,47 @@ class TestIntegration:
 
 
 class TestAtomicReplace:
-    """Tests for the default atomic replace path (animate=True)."""
+    """Tests for _atomic_replace_cell_source."""
 
-    def setup_method(self):
-        self.mock_ynotebook = Mock()
-        self.mock_ycell = MagicMock()
-        self.mock_source = MagicMock()
-        self.mock_ycell.to_py.return_value = {"source": "old content"}
-        self.mock_ycell.__getitem__.return_value = self.mock_source
-        self.mock_source.insert = Mock()
-        self.mock_source.__delitem__ = Mock()
+    def _make_ycell(self, initial: str):
+        """Return (mock_ycell, source_text) backed by real pycrdt."""
+        pycrdt = pytest.importorskip("pycrdt")
+        doc = pycrdt.Doc()
+        source_text = doc.get("source", type=pycrdt.Text)
+        source_text += initial
+        mock_ycell = MagicMock()
+        mock_ycell.to_py.return_value = {"source": initial}
+        mock_ycell.__getitem__.return_value = source_text
+        return mock_ycell, source_text
 
-    def test_atomic_replace_calls_clear_then_insert(self):
-        """clear() then insert(0, new) — correct ops."""
-        _atomic_replace_cell_source(self.mock_ycell, "new content")
-        self.mock_source.clear.assert_called_once()
-        self.mock_source.insert.assert_called_once_with(0, "new content")
+    def test_replaces_content(self):
+        """Old content is fully replaced by new content."""
+        mock_ycell, source_text = self._make_ycell("old content")
+        _atomic_replace_cell_source(mock_ycell, "new content")
+        assert str(source_text) == "new content"
+
+    def test_from_empty_cell(self):
+        """Writing into a blank cell produces correct output."""
+        mock_ycell, source_text = self._make_ycell("")
+        _atomic_replace_cell_source(mock_ycell, "hello")
+        assert str(source_text) == "hello"
+
+    def test_to_empty_cell(self):
+        """Clearing a cell leaves it empty."""
+        mock_ycell, source_text = self._make_ycell("old content")
+        _atomic_replace_cell_source(mock_ycell, "")
+        assert str(source_text) == ""
 
     def test_no_asyncio_sleep_called(self):
         """No event loop yields between CRDT ops — the race condition fix."""
+        mock_ycell, _ = self._make_ycell("old")
         with patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep") as mock_sleep:
-            _atomic_replace_cell_source(self.mock_ycell, "new content")
+            _atomic_replace_cell_source(mock_ycell, "new")
         mock_sleep.assert_not_called()
-
-    def test_real_pycrdt_replace(self):
-        """Correct final content with real YText."""
-        pycrdt = pytest.importorskip("pycrdt")
-        doc = pycrdt.Doc()
-        source_text = doc.get("source", type=pycrdt.Text)
-        source_text += "old content"
-
-        mock_ycell = MagicMock()
-        mock_ycell.to_py.return_value = {"source": "old content"}
-        mock_ycell.__getitem__.return_value = source_text
-
-        _atomic_replace_cell_source(mock_ycell, "new content")
-
-        assert str(source_text) == "new content"
-
-    def test_atomic_replace_from_empty_cell(self):
-        """Write into a blank cell — clear is a no-op but insert must still run."""
-        self.mock_ycell.to_py.return_value = {"source": ""}
-        _atomic_replace_cell_source(self.mock_ycell, "hello")
-        self.mock_source.clear.assert_called_once()
-        self.mock_source.insert.assert_called_once_with(0, "hello")
-
-    def test_atomic_replace_to_empty_cell(self):
-        """Clear a cell — clear runs, insert is called with empty string."""
-        _atomic_replace_cell_source(self.mock_ycell, "")
-        self.mock_source.clear.assert_called_once()
-        self.mock_source.insert.assert_called_once_with(0, "")
 
     def test_no_panic_on_real_ytext(self):
         """Atomic replace on real YText never panics regardless of content size."""
-        pycrdt = pytest.importorskip("pycrdt")
-        doc = pycrdt.Doc()
-        source_text = doc.get("source", type=pycrdt.Text)
-        source_text += "hello world " * 10
-
-        mock_ycell = MagicMock()
-        mock_ycell.to_py.return_value = {"source": str(source_text)}
-        mock_ycell.__getitem__.return_value = source_text
-
+        mock_ycell, source_text = self._make_ycell("hello world " * 10)
         _atomic_replace_cell_source(mock_ycell, "replacement")
         assert str(source_text) == "replacement"
 
