@@ -351,6 +351,7 @@ async def add_cell(
     cell_id: Optional[str] = None,
     add_above: bool = False,
     cell_type: Literal["code", "markdown", "raw"] = "code",
+    animate: bool = False,
 ):
     """Adds a new cell to the Jupyter notebook above or below a specified cell.
 
@@ -403,7 +404,7 @@ async def add_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content or "")
+            await write_to_cell_collaboratively(ydoc, ycell, content or "", animate=animate)
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -438,6 +439,7 @@ async def insert_cell(
     content: Optional[str] = None,
     insert_index: Optional[int] = None,
     cell_type: Literal["code", "markdown", "raw"] = "code",
+    animate: bool = False,
 ):
     """Inserts a new cell to the Jupyter notebook at the specified cell index.
 
@@ -479,7 +481,7 @@ async def insert_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content or "")
+            await write_to_cell_collaboratively(ydoc, ycell, content or "", animate=animate)
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -1087,7 +1089,7 @@ async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
         raise
 
 
-async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
+async def edit_cell(file_path: str, cell_id: str, content: str, animate: bool = False) -> None:
     """Edits the content of a notebook cell with the specified ID
 
     This function modifies the content of a cell in a Jupyter notebook. It first attempts to use
@@ -1121,7 +1123,7 @@ async def edit_cell(file_path: str, cell_id: str, content: str) -> None:
             cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
             if cell_index is not None:
                 ycell = ydoc._ycells[cell_index]
-                await write_to_cell_collaboratively(ydoc, ycell, content)
+                await write_to_cell_collaboratively(ydoc, ycell, content, animate=animate)
             else:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook")
         else:
