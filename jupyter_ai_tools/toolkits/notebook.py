@@ -647,26 +647,24 @@ def set_cursor_in_ynotebook(
 
 
 async def write_to_cell_collaboratively(
-    ynotebook, ycell, content: str, typing_speed: float = 0.1
+    ynotebook, ycell, content: str, typing_speed: float = 0.1, animate: bool = False
 ) -> bool:
     """
-    Writes content to a Jupyter notebook cell with collaborative typing simulation.
+    Writes content to a Jupyter notebook cell.
 
-    This function provides a collaborative writing experience by applying text changes
-    incrementally with visual feedback. It uses a diff-based approach to compute the
-    minimal set of changes needed and applies them with cursor positioning and timing
-    delays to simulate natural typing behavior.
+    With animate=False (default), performs an atomic replace: deletes the old content and
+    inserts the new content with no await between CRDT operations. Safe under concurrent edits.
 
-    The function handles three types of operations:
-    - Delete: Removes text with visual highlighting
-    - Insert: Adds text word-by-word with typing delays
-    - Replace: Combines delete and insert operations
+    With animate=True, applies a diff-based typing simulation with cursor movement and timing
+    delays. Produces a visible typing effect, but is not safe under concurrent edits — stale
+    position references may cause a panic in pycrdt's Rust layer.
 
     Args:
         ynotebook: The YNotebook instance representing the collaborative notebook
         ycell: The YCell instance representing the specific cell to modify
         content: The new content to write to the cell
         typing_speed: Delay in seconds between typing operations (default: 0.1)
+        animate: If True, use diff-based typing animation (default: False)
 
     Returns:
         bool: True if the operation completed successfully
@@ -675,15 +673,6 @@ async def write_to_cell_collaboratively(
         ValueError: If ynotebook/ycell is None or typing_speed is negative
         TypeError: If content is not a string
         RuntimeError: If cell content extraction or writing fails
-
-    Example:
-        >>> # Write with default typing speed
-        >>> success = await write_to_cell_collaboratively(ynotebook, ycell, "print('Hello')")
-        >>>
-        >>> # Write with custom typing speed (faster)
-        >>> success = await write_to_cell_collaboratively(
-        ...     ynotebook, ycell, "print('World')", typing_speed=0.05
-        ... )
     """
     # Input validation
     if ynotebook is None:
@@ -701,69 +690,74 @@ async def write_to_cell_collaboratively(
         old_content = cell.get("source", "")
         cell_source = ycell["source"]  # YText object for collaborative editing
         new_content = content
-
-        # Early return if content is unchanged
-        if old_content == new_content:
-            return True
-
     except Exception as e:
         raise RuntimeError(f"Failed to extract cell content: {e}")
 
-    try:
-        # Compute the minimal set of changes needed using difflib
-        sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
-        cursor_position = 0
-
-        # Set initial cursor position
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-
-        # Apply each change operation sequentially
-        for operation, old_start, old_end, new_start, new_end in sequence_matcher.get_opcodes():
-            if operation == "equal":
-                # No changes needed for this segment, just advance cursor
-                cursor_position += old_end - old_start
-
-            elif operation == "delete":
-                # Remove text with visual feedback
-                delete_length = old_end - old_start
-                await _handle_delete_operation(
-                    ynotebook, cell_source, cursor_position, delete_length, typing_speed
-                )
-                # Cursor stays at same position after deletion
-
-            elif operation == "insert":
-                # Add text with typing simulation
-                cursor_position = await _handle_insert_operation(
-                    ynotebook,
-                    cell_source,
-                    cursor_position,
-                    new_content,
-                    new_start,
-                    new_end,
-                    typing_speed,
-                )
-
-            elif operation == "replace":
-                # Combine delete and insert operations
-                delete_length = old_end - old_start
-                cursor_position = await _handle_replace_operation(
-                    ynotebook,
-                    cell_source,
-                    cursor_position,
-                    new_content,
-                    delete_length,
-                    new_start,
-                    new_end,
-                    typing_speed,
-                )
-
-        # Set final cursor position at the end of the content
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-
+    # Early return if content is unchanged
+    if old_content == new_content:
         return True
 
-    except Exception as e:
-        raise RuntimeError(f"Failed to write cell content collaboratively: {e}")
+    if animate:
+        try:
+            # Compute the minimal set of changes needed using difflib
+            sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
+            cursor_position = 0
+
+            # Set initial cursor position
+            _safe_set_cursor(ynotebook, cell_source, cursor_position)
+
+            # Apply each change operation sequentially
+            for operation, old_start, old_end, new_start, new_end in sequence_matcher.get_opcodes():
+                if operation == "equal":
+                    # No changes needed for this segment, just advance cursor
+                    cursor_position += old_end - old_start
+
+                elif operation == "delete":
+                    # Remove text with visual feedback
+                    delete_length = old_end - old_start
+                    await _handle_delete_operation(
+                        ynotebook, cell_source, cursor_position, delete_length, typing_speed
+                    )
+                    # Cursor stays at same position after deletion
+
+                elif operation == "insert":
+                    # Add text with typing simulation
+                    cursor_position = await _handle_insert_operation(
+                        ynotebook,
+                        cell_source,
+                        cursor_position,
+                        new_content,
+                        new_start,
+                        new_end,
+                        typing_speed,
+                    )
+
+                elif operation == "replace":
+                    # Combine delete and insert operations
+                    delete_length = old_end - old_start
+                    cursor_position = await _handle_replace_operation(
+                        ynotebook,
+                        cell_source,
+                        cursor_position,
+                        new_content,
+                        delete_length,
+                        new_start,
+                        new_end,
+                        typing_speed,
+                    )
+
+            # Set final cursor position at the end of the content
+            _safe_set_cursor(ynotebook, cell_source, cursor_position)
+
+            return True
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to write cell content collaboratively in animation mode): {e}")
+
+    # Default: atomic replace — no await between CRDT ops, no stale positions.
+    del cell_source[0:len(old_content)]
+    cell_source.insert(0, content)
+    return True
 
 
 async def _handle_delete_operation(
