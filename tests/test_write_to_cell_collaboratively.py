@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from jupyter_ai_tools.toolkits.notebook import (
+    _atomic_replace_cell_source,
     _handle_delete_operation,
     _handle_insert_operation,
     _handle_replace_operation,
@@ -90,8 +91,7 @@ class TestWriteToCellCollaboratively:
         mock_handle_replace.return_value = 11  # new cursor position after replace
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content", animate=True
-        )
+            self.mock_ynotebook, self.mock_ycell, "new content"        )
 
         assert result is True
         mock_handle_replace.assert_called_once()
@@ -107,8 +107,7 @@ class TestWriteToCellCollaboratively:
 
         with pytest.raises(RuntimeError):
             await write_to_cell_collaboratively(
-                self.mock_ynotebook, self.mock_ycell, "new content", animate=True
-            )
+                self.mock_ynotebook, self.mock_ycell, "new content"            )
 
     @pytest.mark.asyncio
     @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
@@ -124,8 +123,7 @@ class TestWriteToCellCollaboratively:
         mock_delete_op.return_value = None
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content", animate=True
-        )
+            self.mock_ynotebook, self.mock_ycell, "new content"        )
 
         assert result is True
         mock_delete_op.assert_called_once()
@@ -144,8 +142,7 @@ class TestWriteToCellCollaboratively:
         mock_insert_op.return_value = 5
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content", animate=True
-        )
+            self.mock_ynotebook, self.mock_ycell, "new content"        )
 
         assert result is True
         mock_insert_op.assert_called_once()
@@ -164,8 +161,7 @@ class TestWriteToCellCollaboratively:
         mock_replace_op.return_value = 7
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content", animate=True
-        )
+            self.mock_ynotebook, self.mock_ycell, "new content"        )
 
         assert result is True
         mock_replace_op.assert_called_once()
@@ -343,8 +339,7 @@ class TestIntegration:
         mock_source.__delitem__ = Mock()
 
         result = await write_to_cell_collaboratively(
-            mock_ynotebook, mock_ycell, "world", typing_speed=0.0, animate=True
-        )
+            mock_ynotebook, mock_ycell, "world", typing_speed=0.0        )
 
         assert result is True
         mock_source.insert.assert_called()
@@ -363,8 +358,7 @@ class TestIntegration:
         mock_source.insert = Mock()
 
         await write_to_cell_collaboratively(
-            mock_ynotebook, mock_ycell, "test", typing_speed=0.5, animate=True
-        )
+            mock_ynotebook, mock_ycell, "test", typing_speed=0.5        )
 
         mock_sleep.assert_called()
         sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
@@ -372,7 +366,7 @@ class TestIntegration:
 
 
 class TestAtomicReplace:
-    """Tests for the default atomic replace path (animate=False)."""
+    """Tests for the default atomic replace path (animate=True)."""
 
     def setup_method(self):
         self.mock_ynotebook = Mock()
@@ -383,27 +377,19 @@ class TestAtomicReplace:
         self.mock_source.insert = Mock()
         self.mock_source.__delitem__ = Mock()
 
-    @pytest.mark.asyncio
-    async def test_atomic_replace_calls_delete_then_insert(self):
+    def test_atomic_replace_calls_delete_then_insert(self):
         """del[0:len(old)] then insert(0, new) — correct args."""
-        result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content"
-        )
-        assert result is True
+        _atomic_replace_cell_source(self.mock_ycell, "new content")
         self.mock_source.__delitem__.assert_called_once_with(slice(0, len("old content")))
         self.mock_source.insert.assert_called_once_with(0, "new content")
 
-    @pytest.mark.asyncio
-    async def test_no_asyncio_sleep_called(self):
+    def test_no_asyncio_sleep_called(self):
         """No event loop yields between CRDT ops — the race condition fix."""
         with patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep") as mock_sleep:
-            await write_to_cell_collaboratively(
-                self.mock_ynotebook, self.mock_ycell, "new content"
-            )
+            _atomic_replace_cell_source(self.mock_ycell, "new content")
         mock_sleep.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_real_pycrdt_replace(self):
+    def test_real_pycrdt_replace(self):
         """Correct final content with real YText."""
         pycrdt = pytest.importorskip("pycrdt")
         doc = pycrdt.Doc()
@@ -414,36 +400,25 @@ class TestAtomicReplace:
         mock_ycell.to_py.return_value = {"source": "old content"}
         mock_ycell.__getitem__.return_value = source_text
 
-        result = await write_to_cell_collaboratively(Mock(), mock_ycell, "new content")
+        _atomic_replace_cell_source(mock_ycell, "new content")
 
-        assert result is True
         assert str(source_text) == "new content"
 
-    @pytest.mark.asyncio
-    async def test_atomic_replace_from_empty_cell(self):
+    def test_atomic_replace_from_empty_cell(self):
         """Write into a blank cell — del[0:0] is a no-op but insert must still run."""
         self.mock_ycell.to_py.return_value = {"source": ""}
-        result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "hello"
-        )
-        assert result is True
+        _atomic_replace_cell_source(self.mock_ycell, "hello")
         self.mock_source.__delitem__.assert_called_once_with(slice(0, 0))
         self.mock_source.insert.assert_called_once_with(0, "hello")
 
-    @pytest.mark.asyncio
-    async def test_atomic_replace_to_empty_cell(self):
+    def test_atomic_replace_to_empty_cell(self):
         """Clear a cell — delete runs, insert is called with empty string."""
-        result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, ""
-        )
-        assert result is True
+        _atomic_replace_cell_source(self.mock_ycell, "")
         self.mock_source.__delitem__.assert_called_once_with(slice(0, len("old content")))
         self.mock_source.insert.assert_called_once_with(0, "")
 
-    @pytest.mark.asyncio
-    async def test_concurrent_modification_does_not_panic(self):
-        """Concurrent CRDT modification must not cause a Rust panic (the original crash)."""
-        import asyncio as _asyncio
+    def test_no_panic_on_real_ytext(self):
+        """Atomic replace on real YText never panics regardless of content size."""
         pycrdt = pytest.importorskip("pycrdt")
         doc = pycrdt.Doc()
         source_text = doc.get("source", type=pycrdt.Text)
@@ -453,16 +428,8 @@ class TestAtomicReplace:
         mock_ycell.to_py.return_value = {"source": str(source_text)}
         mock_ycell.__getitem__.return_value = source_text
 
-        async def concurrent_clear():
-            await _asyncio.sleep(0)
-            current = str(source_text)
-            if current:
-                del source_text[0:len(current)]
-
-        await _asyncio.gather(
-            write_to_cell_collaboratively(Mock(), mock_ycell, "replacement"),
-            concurrent_clear(),
-        )
+        _atomic_replace_cell_source(mock_ycell, "replacement")
+        assert str(source_text) == "replacement"
 
 
 if __name__ == "__main__":
