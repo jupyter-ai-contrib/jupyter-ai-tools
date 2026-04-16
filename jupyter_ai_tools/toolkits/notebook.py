@@ -404,7 +404,10 @@ async def add_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content or "", animate=animate)
+            if animate:
+                await write_to_cell_collaboratively(ydoc, ycell, content or "")
+            else:
+                _atomic_replace_cell_source(ycell, content or "")
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -481,7 +484,10 @@ async def insert_cell(
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
-            await write_to_cell_collaboratively(ydoc, ycell, content or "", animate=animate)
+            if animate:
+                await write_to_cell_collaboratively(ydoc, ycell, content or "")
+            else:
+                _atomic_replace_cell_source(ycell, content or "")
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
@@ -648,25 +654,31 @@ def set_cursor_in_ynotebook(
         pass
 
 
+def _atomic_replace_cell_source(ycell, content: str) -> None:
+    """Atomically replaces cell source: del old content then insert new, no await between ops."""
+    old_content = ycell.to_py().get("source", "")
+    if old_content == content:
+        return
+    cell_source = ycell["source"]
+    del cell_source[0:len(old_content)]
+    cell_source.insert(0, content)
+
+
 async def write_to_cell_collaboratively(
-    ynotebook, ycell, content: str, typing_speed: float = 0.1, animate: bool = False
+    ynotebook, ycell, content: str, typing_speed: float = 0.1
 ) -> bool:
     """
-    Writes content to a Jupyter notebook cell.
+    Writes content to a Jupyter notebook cell with diff-based typing simulation.
 
-    With animate=False (default), performs an atomic replace: deletes the old content and
-    inserts the new content with no await between CRDT operations. Safe under concurrent edits.
-
-    With animate=True, applies a diff-based typing simulation with cursor movement and timing
-    delays. Produces a visible typing effect, but is not safe under concurrent edits — stale
-    position references may cause a panic in pycrdt's Rust layer.
+    Applies a typing animation with cursor movement and timing delays. Not safe under
+    concurrent edits — stale position references may cause a panic in pycrdt's Rust layer.
+    Use the atomic inline replace (del + insert on the YText) for the default safe path.
 
     Args:
         ynotebook: The YNotebook instance representing the collaborative notebook
         ycell: The YCell instance representing the specific cell to modify
         content: The new content to write to the cell
         typing_speed: Delay in seconds between typing operations (default: 0.1)
-        animate: If True, use diff-based typing animation (default: False)
 
     Returns:
         bool: True if the operation completed successfully
@@ -699,67 +711,61 @@ async def write_to_cell_collaboratively(
     if old_content == new_content:
         return True
 
-    if animate:
-        try:
-            # Compute the minimal set of changes needed using difflib
-            sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
-            cursor_position = 0
+    try:
+        # Compute the minimal set of changes needed using difflib
+        sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
+        cursor_position = 0
 
-            # Set initial cursor position
-            _safe_set_cursor(ynotebook, cell_source, cursor_position)
+        # Set initial cursor position
+        _safe_set_cursor(ynotebook, cell_source, cursor_position)
 
-            # Apply each change operation sequentially
-            for operation, old_start, old_end, new_start, new_end in sequence_matcher.get_opcodes():
-                if operation == "equal":
-                    # No changes needed for this segment, just advance cursor
-                    cursor_position += old_end - old_start
+        # Apply each change operation sequentially
+        for operation, old_start, old_end, new_start, new_end in sequence_matcher.get_opcodes():
+            if operation == "equal":
+                # No changes needed for this segment, just advance cursor
+                cursor_position += old_end - old_start
 
-                elif operation == "delete":
-                    # Remove text with visual feedback
-                    delete_length = old_end - old_start
-                    await _handle_delete_operation(
-                        ynotebook, cell_source, cursor_position, delete_length, typing_speed
-                    )
-                    # Cursor stays at same position after deletion
+            elif operation == "delete":
+                # Remove text with visual feedback
+                delete_length = old_end - old_start
+                await _handle_delete_operation(
+                    ynotebook, cell_source, cursor_position, delete_length, typing_speed
+                )
+                # Cursor stays at same position after deletion
 
-                elif operation == "insert":
-                    # Add text with typing simulation
-                    cursor_position = await _handle_insert_operation(
-                        ynotebook,
-                        cell_source,
-                        cursor_position,
-                        new_content,
-                        new_start,
-                        new_end,
-                        typing_speed,
-                    )
+            elif operation == "insert":
+                # Add text with typing simulation
+                cursor_position = await _handle_insert_operation(
+                    ynotebook,
+                    cell_source,
+                    cursor_position,
+                    new_content,
+                    new_start,
+                    new_end,
+                    typing_speed,
+                )
 
-                elif operation == "replace":
-                    # Combine delete and insert operations
-                    delete_length = old_end - old_start
-                    cursor_position = await _handle_replace_operation(
-                        ynotebook,
-                        cell_source,
-                        cursor_position,
-                        new_content,
-                        delete_length,
-                        new_start,
-                        new_end,
-                        typing_speed,
-                    )
+            elif operation == "replace":
+                # Combine delete and insert operations
+                delete_length = old_end - old_start
+                cursor_position = await _handle_replace_operation(
+                    ynotebook,
+                    cell_source,
+                    cursor_position,
+                    new_content,
+                    delete_length,
+                    new_start,
+                    new_end,
+                    typing_speed,
+                )
 
-            # Set final cursor position at the end of the content
-            _safe_set_cursor(ynotebook, cell_source, cursor_position)
+        # Set final cursor position at the end of the content
+        _safe_set_cursor(ynotebook, cell_source, cursor_position)
 
-            return True
+        return True
 
-        except Exception as e:
-            raise RuntimeError(f"Failed to write cell content collaboratively in animation mode): {e}")
-
-    # Default: atomic replace — no await between CRDT ops, no stale positions.
-    del cell_source[0:len(old_content)]
-    cell_source.insert(0, content)
-    return True
+    except Exception as e:
+        raise RuntimeError(f"Failed to write cell content collaboratively in animation mode): {e}")
 
 
 async def _handle_delete_operation(
@@ -1123,7 +1129,10 @@ async def edit_cell(file_path: str, cell_id: str, content: str, animate: bool = 
             cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
             if cell_index is not None:
                 ycell = ydoc._ycells[cell_index]
-                await write_to_cell_collaboratively(ydoc, ycell, content, animate=animate)
+                if animate:
+                    await write_to_cell_collaboratively(ydoc, ycell, content)
+                else:
+                    _atomic_replace_cell_source(ycell, content)
             else:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook")
         else:
