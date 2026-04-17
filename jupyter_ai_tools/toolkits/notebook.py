@@ -5,11 +5,10 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import nbformat
 from jupyter_ydoc import YNotebook
-from mcp.types import ImageContent
 from pycrdt import Assoc, Text
 
 from ..utils import (
@@ -20,6 +19,9 @@ from ..utils import (
     normalize_filepath,
     notebook_json_to_md,
 )
+
+if TYPE_CHECKING:
+    from mcp.types import ImageContent
 
 logger = logging.getLogger(__name__)
 
@@ -317,16 +319,38 @@ async def read_cell_image(
     file_path: str,
     cell_id: str,
     output_index: Optional[int] = None,
-) -> Optional[ImageContent]:
+) -> Optional["ImageContent"]:
     """Returns a single image from a cell's outputs as an MCP ImageContent.
 
-    This function reads a specific cell from a Jupyter notebook file and returns
-    the first supported image found in the cell's outputs (typically a matplotlib
-    plot or other rich display_data). The image is returned as MCP ImageContent
-    so multimodal clients can view it directly.
+    Reads a specific cell from a Jupyter notebook and returns the first
+    supported image found in its outputs (typically a matplotlib plot or other
+    rich display_data) as an ``mcp.types.ImageContent``. The base64 payload
+    already stored in the .ipynb JSON is passed through unchanged; no
+    decode/re-encode round-trip is performed.
 
-    The base64 payload stored in the .ipynb JSON is passed through unchanged;
-    no decode/re-encode round-trip is performed.
+    Why the ImageContent return type (and not a base64 string)
+    ----------------------------------------------------------
+    Multimodal LLMs route inputs through two separate channels:
+
+    * the **text channel**, which tokenizes text for the language model, and
+    * the **image channel**, which feeds bytes into a vision encoder.
+
+    A base64 string returned as plain text from an MCP tool lands in the text
+    channel — the model sees tens of thousands of opaque tokens, not a plot.
+    ``mcp.types.ImageContent`` is the protocol-level signal that tells the
+    consumer (e.g. jupyter-ai) "wire these bytes into the vision channel of
+    the downstream LLM call." Without it, returning the image is effectively
+    indistinguishable from returning nothing useful.
+
+    As a design aside: OpenAI's chat completions API accepts
+    ``data:image/png;base64,...`` URLs directly in ``image_url`` inputs, but
+    Claude and Gemini do not — their SDKs require explicit image content
+    blocks with separate data/media-type fields. Either way, the tool-result
+    boundary here is MCP, so ``ImageContent`` is the only correct return.
+
+    MCP is an optional extra of ``jupyter-ai-tools``. The import is lazy; if
+    the ``mcp`` package is not installed, calling this function raises a
+    clear ``RuntimeError`` pointing at ``pip install jupyter-ai-tools[mcp]``.
 
     Args:
         file_path:
@@ -338,7 +362,7 @@ async def read_cell_image(
             scan all outputs and return the first supported image found.
 
     Returns:
-        An `ImageContent` for the first image/png, image/jpeg, or image/gif
+        An ``ImageContent`` for the first image/png, image/jpeg, or image/gif
         found, or None if no supported image is present.
 
         image/svg+xml is intentionally skipped — most multimodal providers do
@@ -349,7 +373,17 @@ async def read_cell_image(
         LookupError: If no cell with the given ID is found.
         IndexError: If output_index is provided but is out of range for the
             cell's outputs.
+        RuntimeError: If the ``mcp`` package is not installed.
     """
+    try:
+        from mcp.types import ImageContent
+    except ImportError as e:
+        raise RuntimeError(
+            "read_cell_image requires the 'mcp' package. "
+            "Install it with: pip install jupyter-ai-tools[mcp]  "
+            "(or: pip install mcp)"
+        ) from e
+
     cell, _ = await read_cell_json(file_path, cell_id)
     outputs = cell.get("outputs", []) or []
 

@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -236,3 +237,19 @@ async def test_base64_list_payload_is_joined(notebook_path):
 
     assert isinstance(result, ImageContent)
     assert base64.b64decode(result.data) == b"list-payload"
+
+
+@pytest.mark.asyncio
+async def test_raises_runtime_error_when_mcp_is_missing(notebook_path):
+    """When the optional mcp dep is not installed, surface a clear error."""
+    removed = {
+        name: sys.modules.pop(name)
+        for name in list(sys.modules)
+        if name == "mcp" or name.startswith("mcp.")
+    }
+    try:
+        with patch.dict(sys.modules, {"mcp": None, "mcp.types": None}):
+            with pytest.raises(RuntimeError, match="jupyter-ai-tools\\[mcp\\]"):
+                await read_cell_image(notebook_path, PNG_CELL_ID)
+    finally:
+        sys.modules.update(removed)
