@@ -385,7 +385,7 @@ async def read_cell_image(
         ) from e
 
     cell, _ = await read_cell_json(file_path, cell_id)
-    outputs = cell.get("outputs", []) or []
+    outputs = cell.get("outputs") or []
 
     if output_index is not None:
         if not 0 <= output_index < len(outputs):
