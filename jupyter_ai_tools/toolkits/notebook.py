@@ -2,12 +2,14 @@ import asyncio
 import difflib
 from functools import lru_cache
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import nbformat
 from jupyter_ydoc import YNotebook
+from mcp.types import ImageContent
 from pycrdt import Assoc, Text
 
 from ..utils import (
@@ -18,6 +20,8 @@ from ..utils import (
     normalize_filepath,
     notebook_json_to_md,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _is_uuid_like(value: str) -> bool:
@@ -307,6 +311,86 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
 
     except Exception:
         raise
+
+
+async def read_cell_image(
+    file_path: str,
+    cell_id: str,
+    output_index: Optional[int] = None,
+) -> Optional[ImageContent]:
+    """Returns a single image from a cell's outputs as an MCP ImageContent.
+
+    This function reads a specific cell from a Jupyter notebook file and returns
+    the first supported image found in the cell's outputs (typically a matplotlib
+    plot or other rich display_data). The image is returned as MCP ImageContent
+    so multimodal clients can view it directly.
+
+    The base64 payload stored in the .ipynb JSON is passed through unchanged;
+    no decode/re-encode round-trip is performed.
+
+    Args:
+        file_path:
+            The relative path to the notebook file on the filesystem.
+        cell_id:
+            The UUID of the cell to read, or a numeric index as string.
+        output_index:
+            If provided, inspect only that single output. If None (default),
+            scan all outputs and return the first supported image found.
+
+    Returns:
+        An `ImageContent` for the first image/png, image/jpeg, or image/gif
+        found, or None if no supported image is present.
+
+        image/svg+xml is intentionally skipped — most multimodal providers do
+        not accept SVG as image input. TODO: rasterize SVG to PNG, or return
+        the raw XML as text.
+
+    Raises:
+        LookupError: If no cell with the given ID is found.
+        IndexError: If output_index is provided but is out of range for the
+            cell's outputs.
+    """
+    cell, _ = await read_cell_json(file_path, cell_id)
+    outputs = cell.get("outputs", []) or []
+
+    if output_index is not None:
+        if not 0 <= output_index < len(outputs):
+            raise IndexError(
+                f"output_index {output_index} out of range "
+                f"(cell has {len(outputs)} outputs)"
+            )
+        candidates = [outputs[output_index]]
+    else:
+        candidates = outputs
+
+    supported_mime_types = ("image/png", "image/jpeg", "image/jpg", "image/gif")
+
+    for output in candidates:
+        if output.get("output_type") not in ("display_data", "execute_result"):
+            continue
+        data = output.get("data", {})
+        for mime_type in supported_mime_types:
+            if mime_type not in data:
+                continue
+            payload = data[mime_type]
+            # nbformat may store base64 as a list of strings or with trailing
+            # whitespace; normalize to a clean single string.
+            if isinstance(payload, list):
+                payload = "".join(payload)
+            payload = "".join(payload.split())
+            if mime_type == "image/gif":
+                logger.warning(
+                    "Returning image/gif from %s (cell_id=%s); multimodal "
+                    "provider support for GIFs is limited (e.g. Claude uses "
+                    "the first frame only, OpenAI may reject).",
+                    file_path,
+                    cell_id,
+                )
+            # Normalize the non-standard image/jpg alias to image/jpeg.
+            reported_mime = "image/jpeg" if mime_type == "image/jpg" else mime_type
+            return ImageContent(type="image", data=payload, mimeType=reported_mime)
+
+    return None
 
 
 async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
