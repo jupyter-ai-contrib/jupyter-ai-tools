@@ -322,6 +322,10 @@ async def read_cell_image(
 ) -> Optional["ImageContent"]:
     """Returns a single image from a cell's outputs as an MCP ImageContent.
 
+    Returns the first supported image found. Use ``output_index`` to access a
+    specific output. Use ``read_cell`` to discover the cell's outputs (note:
+    image outputs are not yet enumerated there — see issue #27).
+
     Reads a specific cell from a Jupyter notebook and returns the first
     supported image found in its outputs (typically a matplotlib plot or other
     rich display_data) as an ``mcp.types.ImageContent``. The base64 payload
@@ -397,7 +401,7 @@ async def read_cell_image(
     else:
         candidates = outputs
 
-    supported_mime_types = ("image/png", "image/jpeg", "image/jpg", "image/gif")
+    supported_mime_types = ("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp")
 
     for output in candidates:
         if output.get("output_type") not in ("display_data", "execute_result"):
@@ -422,6 +426,7 @@ async def read_cell_image(
                 )
             # Normalize the non-standard image/jpg alias to image/jpeg.
             reported_mime = "image/jpeg" if mime_type == "image/jpg" else mime_type
+            # NOTE: Returns on first match. Multi-image support tracked in issue #27.
             return ImageContent(type="image", data=payload, mimeType=reported_mime)
 
     return None
