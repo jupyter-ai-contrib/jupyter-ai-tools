@@ -15,6 +15,7 @@ PNG_CELL_ID = "11111111-aaaa-4aaa-aaaa-aaaaaaaaaaaa"
 JPEG_CELL_ID = "22222222-bbbb-4bbb-bbbb-bbbbbbbbbbbb"
 JPG_CELL_ID = "33333333-cccc-4ccc-cccc-cccccccccccc"
 GIF_CELL_ID = "44444444-dddd-4ddd-dddd-dddddddddddd"
+WEBP_CELL_ID = "bbbbbbbb-5555-4555-5555-555555555555"
 SVG_CELL_ID = "55555555-eeee-4eee-eeee-eeeeeeeeeeee"
 TEXT_ONLY_CELL_ID = "66666666-ffff-4fff-ffff-ffffffffffff"
 MULTI_OUTPUT_CELL_ID = "77777777-1111-4111-1111-111111111111"
@@ -70,6 +71,7 @@ def _build_notebook() -> dict:
             _cell(JPEG_CELL_ID, [_image_output("image/jpeg", _b64(b"fake-jpeg-bytes"))]),
             _cell(JPG_CELL_ID, [_image_output("image/jpg", _b64(b"fake-jpg-bytes"))]),
             _cell(GIF_CELL_ID, [_image_output("image/gif", _b64(b"fake-gif-bytes"))]),
+            _cell(WEBP_CELL_ID, [_image_output("image/webp", _b64(b"fake-webp-bytes"))]),
             _cell(
                 SVG_CELL_ID,
                 [
@@ -160,6 +162,15 @@ async def test_returns_gif_and_logs_warning(notebook_path, caplog):
     assert result.mimeType == "image/gif"
     assert base64.b64decode(result.data) == b"fake-gif-bytes"
     assert any("image/gif" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_returns_webp_image_content(notebook_path):
+    result = await read_cell_image(notebook_path, WEBP_CELL_ID)
+
+    assert isinstance(result, ImageContent)
+    assert result.mimeType == "image/webp"
+    assert base64.b64decode(result.data) == b"fake-webp-bytes"
 
 
 @pytest.mark.asyncio
