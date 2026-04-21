@@ -2,6 +2,29 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.5.0
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.4.2...c01d5ad9b04ac9e143cc30adf9cb0ced4a146e80))
+
+### Enhancements made
+
+- Remove git toolkit [#21](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/21) ([@dlqqq](https://github.com/dlqqq))
+
+### Other merged PRs
+
+- Add read_cell_image tool for surfacing cell images to multimodal models [#26](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/26) ([@xrl](https://github.com/xrl), [@3coins](https://github.com/3coins))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-04-16&to=2026-04-21&type=c))
+
+@3coins ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3A3coins+updated%3A2026-04-16..2026-04-21&type=Issues)) | @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-04-16..2026-04-21&type=Issues)) | @xrl ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Axrl+updated%3A2026-04-16..2026-04-21&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.4.2
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.4.1...bcdeb816508b0d833009110331020f4fd7745103))
@@ -19,8 +42,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-03-20&to=2026-04-16&type=c))
 
 @3coins ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3A3coins+updated%3A2026-03-20..2026-04-16&type=Issues)) | @andrii-i ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Aandrii-i+updated%3A2026-03-20..2026-04-16&type=Issues)) | @claude ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Aclaude+updated%3A2026-03-20..2026-04-16&type=Issues)) | @xrl ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Axrl+updated%3A2026-03-20..2026-04-16&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.4.1
 
