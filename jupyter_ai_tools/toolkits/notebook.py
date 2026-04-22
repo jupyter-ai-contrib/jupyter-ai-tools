@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+from uuid import uuid4
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import nbformat
@@ -1234,13 +1235,22 @@ async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
         raise
 
 
-async def edit_cell(file_path: str, cell_id: str, content: str, animate: bool = False) -> None:
-    """Edits the content of a notebook cell with the specified ID
+async def edit_cell(
+    file_path: str,
+    cell_id: str,
+    content: Optional[str] = None,
+    cell_type: Optional[Literal["code", "markdown", "raw"]] = None,
+    animate: bool = False,
+) -> None:
+    """Edits the content and/or type of a notebook cell with the specified ID.
 
-    This function modifies the content of a cell in a Jupyter notebook. It first attempts to use
+    This function modifies a cell in a Jupyter notebook. It first attempts to use
     the in-memory YDoc representation if the notebook is currently active. If the
     notebook is not active, it falls back to using the filesystem to read, modify,
     and write the notebook file directly using nbformat.
+
+    When changing cell type, the cell is replaced via ``set_cell()`` to ensure
+    type-specific fields (outputs, execution_count) are correctly added or removed.
 
     Args:
         file_path:
@@ -1248,7 +1258,11 @@ async def edit_cell(file_path: str, cell_id: str, content: str, animate: bool = 
         cell_id:
             The UUID of the cell to edit, or a numeric index as string.
         content:
-            The new content for the cell. If None, the cell content remains unchanged.
+            The new content for the cell. If None, the existing content is preserved.
+        cell_type:
+            The new cell type ("code", "markdown", "raw"). If None, the type is unchanged.
+        animate:
+            If True, simulate collaborative typing when changing content.
 
     Returns:
         None
@@ -1266,25 +1280,72 @@ async def edit_cell(file_path: str, cell_id: str, content: str, animate: bool = 
 
         if ydoc:
             cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
-            if cell_index is not None:
-                ycell = ydoc._ycells[cell_index]
-                if animate:
-                    await write_to_cell_collaboratively(ydoc, ycell, content)
-                else:
-                    _atomic_replace_cell_source(ycell, content)
-            else:
+            if cell_index is None:
                 raise ValueError(f"Cell with {cell_id=} not found in notebook")
+
+            ycell = ydoc._ycells[cell_index]
+            old_cell = ycell.to_py()
+            old_type = old_cell.get("cell_type")
+            needs_type_change = cell_type is not None and cell_type != old_type
+            source = content if content is not None else old_cell.get("source", "")
+
+            if needs_type_change:
+                new_cell = {
+                    "cell_type": cell_type,
+                    "source": source,
+                    "id": old_cell.get("id", str(uuid4())),
+                    "metadata": old_cell.get("metadata", {}),
+                }
+                if cell_type == "code":
+                    new_cell["outputs"] = []
+                    new_cell["execution_count"] = None
+                ydoc.set_cell(cell_index, new_cell)
+                if animate and content is not None:
+                    # After replacement, write content collaboratively on the new ycell
+                    new_ycell = ydoc._ycells[cell_index]
+                    _atomic_replace_cell_source(new_ycell, "")
+                    await write_to_cell_collaboratively(ydoc, new_ycell, source)
+            else:
+                if content is not None:
+                    if animate:
+                        await write_to_cell_collaboratively(ydoc, ycell, content)
+                    else:
+                        _atomic_replace_cell_source(ycell, content)
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 
             cell_index = _get_cell_index_from_id_nbformat(notebook, resolved_cell_id)
-            if cell_index is not None:
-                notebook.cells[cell_index].source = content
+            if cell_index is None:
+                raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
+
+            old_cell = notebook.cells[cell_index]
+            old_type = old_cell.cell_type
+            needs_type_change = cell_type is not None and cell_type != old_type
+            source = content if content is not None else old_cell.source
+
+            changed = False
+            if needs_type_change:
+                cell_id_val = getattr(old_cell, "id", None)
+                metadata = old_cell.get("metadata", {})
+                if cell_type == "code":
+                    new_cell = nbformat.v4.new_code_cell(source=source)
+                elif cell_type == "markdown":
+                    new_cell = nbformat.v4.new_markdown_cell(source=source)
+                else:
+                    new_cell = nbformat.v4.new_raw_cell(source=source)
+                if cell_id_val:
+                    new_cell.id = cell_id_val
+                new_cell.metadata.update(metadata)
+                notebook.cells[cell_index] = new_cell
+                changed = True
+            elif content is not None:
+                old_cell.source = content
+                changed = True
+
+            if changed:
                 with open(file_path, "w", encoding="utf-8") as f:
                     nbformat.write(notebook, f)
-            else:
-                raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
 
         return {"success": True}
     except Exception:
