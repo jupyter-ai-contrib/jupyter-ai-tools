@@ -1416,11 +1416,13 @@ def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> Optional[int]:
     Returns:
         The index of the cell in the notebook, or None if not found.
     """
-    try:
-        cell_index, _ = ydoc.find_cell(cell_id)
-        return cell_index
-    except (AttributeError, KeyError):
-        return None
+    for i, ycell in enumerate(ydoc.ycells):
+        try:
+            if ycell["id"] == cell_id:
+                return i
+        except KeyError:
+            continue
+    return None
 
 
 def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> Optional[int]:
