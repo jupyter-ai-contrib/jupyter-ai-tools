@@ -31,9 +31,23 @@ def test_returns_index_when_cell_id_matches():
     _populate(
         ydoc,
         [
-            {"cell_type": "code", "source": "x = 1", "id": "first", "metadata": {}, "outputs": [], "execution_count": None},
+            {
+                "cell_type": "code",
+                "source": "x = 1",
+                "id": "first",
+                "metadata": {},
+                "outputs": [],
+                "execution_count": None,
+            },
             {"cell_type": "markdown", "source": "# title", "id": "second", "metadata": {}},
-            {"cell_type": "code", "source": "x = 2", "id": "third", "metadata": {}, "outputs": [], "execution_count": None},
+            {
+                "cell_type": "code",
+                "source": "x = 2",
+                "id": "third",
+                "metadata": {},
+                "outputs": [],
+                "execution_count": None,
+            },
         ],
     )
 
@@ -47,7 +61,14 @@ def test_returns_none_when_cell_id_missing():
     _populate(
         ydoc,
         [
-            {"cell_type": "code", "source": "x = 1", "id": "only", "metadata": {}, "outputs": [], "execution_count": None},
+            {
+                "cell_type": "code",
+                "source": "x = 1",
+                "id": "only",
+                "metadata": {},
+                "outputs": [],
+                "execution_count": None,
+            },
         ],
     )
 
