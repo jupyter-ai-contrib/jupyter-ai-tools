@@ -10,7 +10,6 @@ import pytest
 
 from jupyter_ai_tools.toolkits.notebook import edit_cell
 
-
 # ── Helpers ──
 
 
@@ -32,19 +31,38 @@ def _read_notebook(path):
 @contextmanager
 def _nbformat_path():
     """Patch get_file_id and get_jupyter_ydoc so edit_cell takes the nbformat path."""
-    with patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock), \
-         patch("jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc", new_callable=AsyncMock, return_value=None):
+    with (
+        patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock),
+        patch(
+            "jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
         yield
 
 
 @contextmanager
 def _ydoc_path(ydoc, resolved_cell_id="cell-1", cell_index=0):
     """Patch dependencies so edit_cell takes the YDoc path with the given mock."""
-    with patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock), \
-         patch("jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc", new_callable=AsyncMock, return_value=ydoc), \
-         patch("jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc", return_value=cell_index), \
-         patch("jupyter_ai_tools.toolkits.notebook.normalize_filepath", side_effect=lambda x: x), \
-         patch("jupyter_ai_tools.toolkits.notebook._resolve_cell_id", new_callable=AsyncMock, return_value=resolved_cell_id):
+    with (
+        patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock),
+        patch(
+            "jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc",
+            new_callable=AsyncMock,
+            return_value=ydoc,
+        ),
+        patch(
+            "jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc",
+            return_value=cell_index,
+        ),
+        patch("jupyter_ai_tools.toolkits.notebook.normalize_filepath", side_effect=lambda x: x),
+        patch(
+            "jupyter_ai_tools.toolkits.notebook._resolve_cell_id",
+            new_callable=AsyncMock,
+            return_value=resolved_cell_id,
+        ),
+    ):
         yield
 
 
@@ -396,8 +414,10 @@ class TestEditCellTypeYdoc:
     async def test_content_only_uses_atomic_replace(self):
         ydoc, ycell = _make_mock_ydoc()
 
-        with _ydoc_path(ydoc), \
-             patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace:
+        with (
+            _ydoc_path(ydoc),
+            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+        ):
             await edit_cell("test.ipynb", "cell-1", content="new code")
 
         mock_replace.assert_called_once_with(ycell, "new code")
@@ -407,8 +427,10 @@ class TestEditCellTypeYdoc:
     async def test_same_type_skips_set_cell(self):
         ydoc, ycell = _make_mock_ydoc(cell_type="code")
 
-        with _ydoc_path(ydoc), \
-             patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace:
+        with (
+            _ydoc_path(ydoc),
+            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+        ):
             await edit_cell("test.ipynb", "cell-1", content="updated", cell_type="code")
 
         mock_replace.assert_called_once_with(ycell, "updated")
@@ -419,8 +441,10 @@ class TestEditCellTypeYdoc:
         """Neither set_cell nor _atomic_replace should be called."""
         ydoc, _ = _make_mock_ydoc()
 
-        with _ydoc_path(ydoc), \
-             patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace:
+        with (
+            _ydoc_path(ydoc),
+            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+        ):
             await edit_cell("test.ipynb", "cell-1")
 
         ydoc.set_cell.assert_not_called()
@@ -443,10 +467,17 @@ class TestEditCellTypeYdoc:
         new_ycell = MagicMock()
         ydoc._ycells = [new_ycell]  # After set_cell, the ycell at index 0 is the new one
 
-        with _ydoc_path(ydoc), \
-             patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace, \
-             patch("jupyter_ai_tools.toolkits.notebook.write_to_cell_collaboratively", new_callable=AsyncMock) as mock_write:
-            await edit_cell("test.ipynb", "cell-1", content="# Animated", cell_type="markdown", animate=True)
+        with (
+            _ydoc_path(ydoc),
+            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+            patch(
+                "jupyter_ai_tools.toolkits.notebook.write_to_cell_collaboratively",
+                new_callable=AsyncMock,
+            ) as mock_write,
+        ):
+            await edit_cell(
+                "test.ipynb", "cell-1", content="# Animated", cell_type="markdown", animate=True
+            )
 
         ydoc.set_cell.assert_called_once()
         # Should clear the new cell then write collaboratively
@@ -457,7 +488,11 @@ class TestEditCellTypeYdoc:
     async def test_cell_not_found_raises(self):
         ydoc, _ = _make_mock_ydoc()
 
-        with _ydoc_path(ydoc, resolved_cell_id="bad-id"), \
-             patch("jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc", return_value=None):
+        with (
+            _ydoc_path(ydoc, resolved_cell_id="bad-id"),
+            patch(
+                "jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc", return_value=None
+            ),
+        ):
             with pytest.raises(ValueError, match="not found"):
                 await edit_cell("test.ipynb", "bad-id", content="x")
