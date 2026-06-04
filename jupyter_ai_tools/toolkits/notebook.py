@@ -1,12 +1,12 @@
 import asyncio
 import difflib
-from functools import lru_cache
 import json
 import logging
 import os
 import re
-from uuid import uuid4
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
+from uuid import uuid4
 
 import nbformat
 from jupyter_ydoc import YNotebook
@@ -105,7 +105,10 @@ def process_notebook_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     elif output_type == "error":
-        error_text = f"{output_data.get('ename', '')}: {output_data.get('evalue', '')}\n{chr(10).join(output_data.get('traceback', []))}"
+        ename = output_data.get("ename", "")
+        evalue = output_data.get("evalue", "")
+        traceback = "\n".join(output_data.get("traceback", []))
+        error_text = f"{ename}: {evalue}\n{traceback}"
         return {"output_type": output_type, "text": clean_text(error_text)}
 
     return output_data
@@ -126,7 +129,9 @@ def extract_image_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def format_notebook_cell(cell_data: Dict[str, Any], cell_index: int, language: str, include_full_outputs: bool = False) -> Dict[str, Any]:
+def format_notebook_cell(
+    cell_data: Dict[str, Any], cell_index: int, language: str, include_full_outputs: bool = False
+) -> Dict[str, Any]:
     """Format a Jupyter notebook cell into a standardized format.
 
     Args:
@@ -139,8 +144,14 @@ def format_notebook_cell(cell_data: Dict[str, Any], cell_index: int, language: s
 
     formatted_cell = {
         "cellType": cell_data["cell_type"],
-        "source": "".join(cell_data["source"]) if isinstance(cell_data["source"], list) else cell_data["source"],
-        "execution_count": cell_data.get("execution_count") if cell_data["cell_type"] == "code" else None,
+        "source": (
+            "".join(cell_data["source"])
+            if isinstance(cell_data["source"], list)
+            else cell_data["source"]
+        ),
+        "execution_count": (
+            cell_data.get("execution_count") if cell_data["cell_type"] == "code" else None
+        ),
         "cell_id": cell_id,
     }
 
@@ -151,17 +162,24 @@ def format_notebook_cell(cell_data: Dict[str, Any], cell_index: int, language: s
         processed_outputs = [process_notebook_output(output) for output in cell_data["outputs"]]
 
         if not include_full_outputs and len(json.dumps(processed_outputs)) > 10000:
-            formatted_cell["outputs"] = [{
-                "output_type": "stream",
-                "text": f"Outputs are too large to include. Use command with: cat <notebook_path> | jq '.cells[{cell_index}].outputs'",
-            }]
+            formatted_cell["outputs"] = [
+                {
+                    "output_type": "stream",
+                    "text": (
+                        "Outputs are too large to include. Use command with: "
+                        f"cat <notebook_path> | jq '.cells[{cell_index}].outputs'"
+                    ),
+                }
+            ]
         else:
             formatted_cell["outputs"] = processed_outputs
 
     return formatted_cell
 
 
-async def read_notebook_cells(notebook_path: str, specific_cell_id: Optional[str] = None) -> List[Dict[str, Any]]:
+async def read_notebook_cells(
+    notebook_path: str, specific_cell_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """Read and process cells from a Jupyter notebook file.
 
     Args:
@@ -395,8 +413,7 @@ async def read_cell_image(
     if output_index is not None:
         if not 0 <= output_index < len(outputs):
             raise IndexError(
-                f"output_index {output_index} out of range "
-                f"(cell has {len(outputs)} outputs)"
+                f"output_index {output_index} out of range " f"(cell has {len(outputs)} outputs)"
             )
         candidates = [outputs[output_index]]
     else:
@@ -516,7 +533,7 @@ async def add_cell(
             )
             insert_index = _determine_insert_index(cells_count, cell_index, add_above)
 
-            cell = {
+            cell: Dict[str, Any] = {
                 "cell_type": cell_type,
                 "source": "",
             }
@@ -596,7 +613,7 @@ async def insert_cell(
         if ydoc:
             cells_count = ydoc.cell_number
 
-            cell = {
+            cell: Dict[str, Any] = {
                 "cell_type": cell_type,
                 "source": "",
             }
@@ -1098,7 +1115,7 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
     """
     awareness = await get_global_awareness()
     if not awareness:
-        return
+        return None
     for _, state in awareness.states.items():
         _username = state.get("user", {}).get("username", None)
         if username and username != _username:
@@ -1111,6 +1128,8 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
             notebooks = [doc for doc in documents if doc.endswith('.ipynb')]
             if len(notebooks) == 1:
                 return notebooks[0]
+
+    return None
 
 
 def _get_active_cell_id_from_ydoc(ydoc: YNotebook, username: Optional[str] = None) -> Optional[str]:
@@ -1221,7 +1240,7 @@ async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
         if distance == 0:
             return {"success": True, "result": "Already at target cell"}
 
-        result = None
+        result: dict = {}
         if distance > 0:
             for _ in range(distance):
                 result = await execute_command("notebook:move-cursor-down")
@@ -1241,7 +1260,7 @@ async def edit_cell(
     content: Optional[str] = None,
     cell_type: Optional[Literal["code", "markdown", "raw"]] = None,
     animate: bool = False,
-) -> None:
+) -> dict:
     """Edits the content and/or type of a notebook cell with the specified ID.
 
     This function modifies a cell in a Jupyter notebook. It first attempts to use
@@ -1265,7 +1284,7 @@ async def edit_cell(
             If True, simulate collaborative typing when changing content.
 
     Returns:
-        None
+        A dictionary ``{"success": True}`` once the edit completes.
 
     Raises:
         ValueError: If the cell_id is not found in the notebook.
@@ -1477,13 +1496,17 @@ def list_available_kernelspecs():
     for kernel_name, _ in kernels.items():
         try:
             spec = ksm.get_kernel_spec(kernel_name)
-            specs.append({"name": kernel_name, "display_name": spec.display_name, "language": spec.language})
+            specs.append(
+                {"name": kernel_name, "display_name": spec.display_name, "language": spec.language}
+            )
         except Exception:
-            specs = [{"name": "python3", "display_name": "Python 3 (ipykernel)", "language": "python"}]
+            specs = [
+                {"name": "python3", "display_name": "Python 3 (ipykernel)", "language": "python"}
+            ]
     return specs
 
 
-async def create_notebook(file_path: str, kernel_name: str = None) -> str:
+async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> str:
     """Creates a new Jupyter notebook at the specified file path.
 
     The new notebook starts with one empty default cell. Account for this
