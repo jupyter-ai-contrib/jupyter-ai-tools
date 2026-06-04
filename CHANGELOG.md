@@ -2,6 +2,29 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.5.2
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.5.1...64df7a41f00911aab43610c208791b4a59649e21))
+
+### Bugs fixed
+
+- Fixes edit_cell, delete_cell, move_cell, and relative insert_cell for any environment that does not have jupyter-server-documents installed. [#30](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/30) ([@joadoumie](https://github.com/joadoumie), [@jtpio](https://github.com/jtpio))
+
+### Maintenance and upkeep improvements
+
+- Fix CI, require Python 3.10 [#32](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/32) ([@jtpio](https://github.com/jtpio), [@trungleduc](https://github.com/trungleduc))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-04-22&to=2026-06-04&type=c))
+
+@joadoumie ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajoadoumie+updated%3A2026-04-22..2026-06-04&type=Issues)) | @jtpio ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajtpio+updated%3A2026-04-22..2026-06-04&type=Issues)) | @trungleduc ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Atrungleduc+updated%3A2026-04-22..2026-06-04&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.5.1
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.5.0...fa54ad18991b7d559894fb9a6c02baead62bfe69))
@@ -18,8 +41,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-04-21&to=2026-04-22&type=c))
 
 @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-04-21..2026-04-22&type=Issues)) | @joshuatowner ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajoshuatowner+updated%3A2026-04-21..2026-04-22&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.5.0
 
