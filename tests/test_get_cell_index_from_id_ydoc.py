@@ -1,14 +1,4 @@
-"""Tests for _get_cell_index_from_id_ydoc against a real jupyter_ydoc.YNotebook.
-
-These tests exercise the helper directly (no mocks) to verify it works against
-the upstream YNotebook from jupyter_ydoc, which does not define a `find_cell`
-method. The previous implementation called `ydoc.find_cell(...)` and silently
-returned None on AttributeError, making every edit_cell/delete_cell/move_cell
-call fail with a misleading "cell not found" error on installs without
-jupyter-server-documents.
-
-Closes #29.
-"""
+"""Tests for _get_cell_index_from_id_ydoc against a real jupyter_ydoc.YNotebook."""
 
 from jupyter_ydoc import YNotebook
 
