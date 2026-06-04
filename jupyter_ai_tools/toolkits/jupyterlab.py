@@ -8,12 +8,18 @@ from ..utils import get_serverapp
 
 
 async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) -> dict:
-    """Run a coroutine with an optional timeout. If timeout is exceeded, the task continues in the background."""
+    """Run a coroutine with an optional timeout.
+
+    If timeout is exceeded, the task continues in the background.
+    """
     task = asyncio.create_task(coro)
     try:
         return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
     except asyncio.TimeoutError:
-        return {"status": "timed_out", "message": f"{started_msg}, timed out after {timeout}s of waiting"}
+        return {
+            "status": "timed_out",
+            "message": f"{started_msg}, timed out after {timeout}s of waiting",
+        }
 
 
 async def open_file(file_path: str):
@@ -56,7 +62,9 @@ async def run_all_cells(timeout: Optional[float] = None) -> dict:
     )
 
 
-async def run_cell(cell_id: str, username: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+async def run_cell(
+    cell_id: str, username: Optional[str] = None, timeout: Optional[float] = None
+) -> dict:
     """Runs a specific cell in the active notebook by selecting it and executing it.
 
     Does NOT return cell outputs — call `read_notebook_cells` to inspect results.

@@ -44,10 +44,12 @@ class TestCollaborativeTool:
         async def test_func(file_path: str, content: str):
             return f"processed {file_path}"
 
-        with patch(
-            "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
-        ), patch("jupyter_ai_tools.utils.get_file_id", return_value="test-file-id"), patch(
-            "jupyter_ai_tools.utils.get_jupyter_ydoc", return_value=mock_ydoc
+        with (
+            patch(
+                "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
+            ),
+            patch("jupyter_ai_tools.utils.get_file_id", return_value="test-file-id"),
+            patch("jupyter_ai_tools.utils.get_jupyter_ydoc", return_value=mock_ydoc),
         ):
             result = await test_func("test_notebook.ipynb", "test content")
 
@@ -78,11 +80,13 @@ class TestCollaborativeTool:
         async def test_func(file_path: str, content: str):
             return f"processed {file_path}"
 
-        with patch(
-            "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
-        ), patch("jupyter_ai_tools.utils.get_file_id") as mock_file_id, patch(
-            "jupyter_ai_tools.utils.get_jupyter_ydoc"
-        ) as mock_ydoc:
+        with (
+            patch(
+                "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
+            ),
+            patch("jupyter_ai_tools.utils.get_file_id") as mock_file_id,
+            patch("jupyter_ai_tools.utils.get_jupyter_ydoc") as mock_ydoc,
+        ):
             result = await test_func("test_file.py", "test content")
 
             # Verify function executed
@@ -172,13 +176,13 @@ class TestCollaborativeTool:
         async def test_func(file_path: str):
             return f"processed {file_path}"
 
-        with patch(
-            "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
-        ), patch(
-            "jupyter_ai_tools.utils.get_file_id", side_effect=Exception("File ID error")
-        ), patch(
-            "jupyter_ai_tools.utils.get_jupyter_ydoc"
-        ) as mock_ydoc:
+        with (
+            patch(
+                "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
+            ),
+            patch("jupyter_ai_tools.utils.get_file_id", side_effect=Exception("File ID error")),
+            patch("jupyter_ai_tools.utils.get_jupyter_ydoc") as mock_ydoc,
+        ):
             # Function should still execute despite notebook awareness error
             result = await test_func("test.ipynb")
 
@@ -241,10 +245,12 @@ class TestCollaborativeTool:
         async def test_func(file_path: str):
             return f"processed {file_path}"
 
-        with patch(
-            "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
-        ), patch("jupyter_ai_tools.utils.get_file_id", return_value="test-file-id"), patch(
-            "jupyter_ai_tools.utils.get_jupyter_ydoc", return_value=None
+        with (
+            patch(
+                "jupyter_ai_tools.utils.get_global_awareness", return_value=mock_global_awareness
+            ),
+            patch("jupyter_ai_tools.utils.get_file_id", return_value="test-file-id"),
+            patch("jupyter_ai_tools.utils.get_jupyter_ydoc", return_value=None),
         ):
             result = await test_func("test.ipynb")
 

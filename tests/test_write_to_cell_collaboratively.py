@@ -91,7 +91,8 @@ class TestWriteToCellCollaboratively:
         mock_handle_replace.return_value = 11  # new cursor position after replace
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content"        )
+            self.mock_ynotebook, self.mock_ycell, "new content"
+        )
 
         assert result is True
         mock_handle_replace.assert_called_once()
@@ -106,8 +107,7 @@ class TestWriteToCellCollaboratively:
         mock_sequence_matcher.side_effect = Exception("Difflib error")
 
         with pytest.raises(RuntimeError):
-            await write_to_cell_collaboratively(
-                self.mock_ynotebook, self.mock_ycell, "new content"            )
+            await write_to_cell_collaboratively(self.mock_ynotebook, self.mock_ycell, "new content")
 
     @pytest.mark.asyncio
     @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
@@ -123,7 +123,8 @@ class TestWriteToCellCollaboratively:
         mock_delete_op.return_value = None
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content"        )
+            self.mock_ynotebook, self.mock_ycell, "new content"
+        )
 
         assert result is True
         mock_delete_op.assert_called_once()
@@ -142,7 +143,8 @@ class TestWriteToCellCollaboratively:
         mock_insert_op.return_value = 5
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content"        )
+            self.mock_ynotebook, self.mock_ycell, "new content"
+        )
 
         assert result is True
         mock_insert_op.assert_called_once()
@@ -161,7 +163,8 @@ class TestWriteToCellCollaboratively:
         mock_replace_op.return_value = 7
 
         result = await write_to_cell_collaboratively(
-            self.mock_ynotebook, self.mock_ycell, "new content"        )
+            self.mock_ynotebook, self.mock_ycell, "new content"
+        )
 
         assert result is True
         mock_replace_op.assert_called_once()
@@ -339,7 +342,8 @@ class TestIntegration:
         mock_source.__delitem__ = Mock()
 
         result = await write_to_cell_collaboratively(
-            mock_ynotebook, mock_ycell, "world", typing_speed=0.0        )
+            mock_ynotebook, mock_ycell, "world", typing_speed=0.0
+        )
 
         assert result is True
         mock_source.insert.assert_called()
@@ -357,8 +361,7 @@ class TestIntegration:
         mock_ycell.__getitem__.return_value = mock_source
         mock_source.insert = Mock()
 
-        await write_to_cell_collaboratively(
-            mock_ynotebook, mock_ycell, "test", typing_speed=0.5        )
+        await write_to_cell_collaboratively(mock_ynotebook, mock_ycell, "test", typing_speed=0.5)
 
         mock_sleep.assert_called()
         sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
