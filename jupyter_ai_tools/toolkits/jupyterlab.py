@@ -45,32 +45,44 @@ async def open_file(file_path: str):
     return await execute_command("docmanager:open", {"path": file_path})
 
 
-async def run_all_cells(timeout: Optional[float] = None) -> dict:
-    """Runs all cells in the currently active Jupyter notebook.
+async def run_all_cells(file_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+    """Runs all cells in a Jupyter notebook.
 
     Does NOT return cell outputs — call `read_notebook_cells` to inspect results.
 
     Args:
+        file_path: Path to the notebook file. If provided, the notebook is
+                   opened/focused before running. If None, runs in the
+                   currently active notebook.
         timeout: Max seconds to wait (default and max: 10s). A timeout does
                  NOT mean execution failed; the kernel continues running.
 
     Returns:
         dict with `success` (bool) and optional `error` or `result` fields.
     """
+    if file_path:
+        await open_file(file_path)
+
     return await _run_with_timeout(
         execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
     )
 
 
 async def run_cell(
-    cell_id: str, username: Optional[str] = None, timeout: Optional[float] = None
+    cell_id: str,
+    file_path: Optional[str] = None,
+    username: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> dict:
-    """Runs a specific cell in the active notebook by selecting it and executing it.
+    """Runs a specific cell in a notebook by selecting it and executing it.
 
     Does NOT return cell outputs — call `read_notebook_cells` to inspect results.
 
     Args:
         cell_id: The UUID of the cell to run, or a numeric index as string
+        file_path: Path to the notebook file. If provided, the notebook is
+                   opened/focused before running. If None, runs in the
+                   currently active notebook.
         username: Optional username to get the active cell for that specific user
         timeout: Max seconds to wait (default and max: 10s). A timeout does
                  NOT mean execution failed; the kernel continues running.
@@ -79,6 +91,9 @@ async def run_cell(
         dict with `success` (bool) and optional `error` or `result` fields.
     """
     from .notebook import select_cell
+
+    if file_path:
+        await open_file(file_path)
 
     await select_cell(cell_id, username)
 
