@@ -2,6 +2,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.6.0
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.5.2...13ac804335d639279e4ccff14250246ab4a99e73))
+
+### Merged PRs
+
+- Add file_path param to run_cell and run_all_cells [#34](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/34) ([@bhavana-nair](https://github.com/bhavana-nair), [@andrii-i](https://github.com/andrii-i), [@dlqqq](https://github.com/dlqqq))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-06-04&to=2026-07-09&type=c))
+
+@andrii-i ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Aandrii-i+updated%3A2026-06-04..2026-07-09&type=Issues)) | @bhavana-nair ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Abhavana-nair+updated%3A2026-06-04..2026-07-09&type=Issues)) | @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-06-04..2026-07-09&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.5.2
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.5.1...64df7a41f00911aab43610c208791b4a59649e21))
@@ -22,8 +41,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-04-22&to=2026-06-04&type=c))
 
 @joadoumie ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajoadoumie+updated%3A2026-04-22..2026-06-04&type=Issues)) | @jtpio ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajtpio+updated%3A2026-04-22..2026-06-04&type=Issues)) | @trungleduc ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Atrungleduc+updated%3A2026-04-22..2026-06-04&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.5.1
 
