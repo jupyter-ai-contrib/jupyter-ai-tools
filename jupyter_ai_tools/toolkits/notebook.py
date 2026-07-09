@@ -1194,12 +1194,16 @@ async def get_open_documents(username: Optional[str] = None) -> Optional[List[st
     return None
 
 
-async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
+async def select_cell(
+    cell_id: str, username: Optional[str] = None, file_path: Optional[str] = None
+) -> dict:
     """Selects a cell in the active notebook by navigating to it using cursor movements.
 
     Args:
         cell_id: The UUID of the cell to select, or a numeric index as string
         username: Optional username to get the active cell for that specific user
+        file_path: Optional path to the notebook file. If provided, uses this path
+                   instead of deriving the notebook from awareness state.
 
     Returns:
         dict: A dictionary containing the response from the last cursor movement
@@ -1211,7 +1215,8 @@ async def select_cell(cell_id: str, username: Optional[str] = None) -> dict:
     from jupyterlab_commands_toolkit.tools import execute_command
 
     try:
-        file_path = await get_active_notebook(username)
+        if not file_path:
+            file_path = await get_active_notebook(username)
         if not file_path:
             raise RuntimeError("No active notebook found. Please open a notebook first.")
 

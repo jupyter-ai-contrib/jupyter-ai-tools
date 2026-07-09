@@ -45,33 +45,58 @@ async def open_file(file_path: str):
     return await execute_command("docmanager:open", {"path": file_path})
 
 
-async def run_all_cells(timeout: Optional[float] = None) -> dict:
-    """Runs all cells in the currently active Jupyter notebook.
+async def run_all_cells(file_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+    """Runs all cells in a Jupyter notebook.
 
     Does NOT return cell outputs — call `read_notebook_cells` to inspect results.
 
+    Valid argument combinations:
+        - `file_path`: Run all cells in the specified notebook.
+        - No arguments: Run all cells in the currently active notebook.
+
     Args:
+        file_path: Path to the notebook file. If provided, the notebook is
+                   opened/focused before running. If None, runs in the
+                   currently active notebook.
         timeout: Max seconds to wait (default and max: 10s). A timeout does
                  NOT mean execution failed; the kernel continues running.
 
     Returns:
         dict with `success` (bool) and optional `error` or `result` fields.
     """
+    if file_path:
+        result = await open_file(file_path)
+        if not result.get("success"):
+            return result
+
     return await _run_with_timeout(
         execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
     )
 
 
 async def run_cell(
-    cell_id: str, username: Optional[str] = None, timeout: Optional[float] = None
+    cell_id: str,
+    file_path: Optional[str] = None,
+    username: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> dict:
-    """Runs a specific cell in the active notebook by selecting it and executing it.
+    """Runs a specific cell in a notebook by selecting it and executing it.
 
     Does NOT return cell outputs — call `read_notebook_cells` to inspect results.
 
+    Valid argument combinations:
+        - `file_path` + `cell_id`: Run a specific cell in the given notebook.
+        - `username` + `cell_id`: Run a specific cell in the user's active notebook.
+        - `cell_id` only: Run a specific cell in the currently active notebook.
+
     Args:
-        cell_id: The UUID of the cell to run, or a numeric index as string
-        username: Optional username to get the active cell for that specific user
+        cell_id: The UUID of the cell to run, or a numeric index as string.
+        file_path: Path to the notebook file. If provided, the notebook is
+                   opened/focused before running and used to resolve the cell.
+                   If None, the user's active notebook is used.
+        username: Optional username to get the active cell for that specific user.
+                  Also used when file_path is provided, to pick whose active
+                  cell the cursor navigation starts from.
         timeout: Max seconds to wait (default and max: 10s). A timeout does
                  NOT mean execution failed; the kernel continues running.
 
@@ -80,7 +105,12 @@ async def run_cell(
     """
     from .notebook import select_cell
 
-    await select_cell(cell_id, username)
+    if file_path:
+        result = await open_file(file_path)
+        if not result.get("success"):
+            return result
+
+    await select_cell(cell_id, username, file_path=file_path)
 
     return await _run_with_timeout(
         execute_command("notebook:run-cell"), timeout, "Cell execution started"
