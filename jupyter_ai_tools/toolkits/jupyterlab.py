@@ -95,7 +95,8 @@ async def run_cell(
                    opened/focused before running and used to resolve the cell.
                    If None, the user's active notebook is used.
         username: Optional username to get the active cell for that specific user.
-                  Ignored when file_path is provided.
+                  Also used when file_path is provided, to pick whose active
+                  cell the cursor navigation starts from.
         timeout: Max seconds to wait (default and max: 10s). A timeout does
                  NOT mean execution failed; the kernel continues running.
 
