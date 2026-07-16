@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
   "jupyter_server>=1.6,<3",
   "pycrdt",
-  "jupyter_ydoc>=3.0.0,<4.0.0",
+  "jupyter_ydoc",
 ]
 
 
