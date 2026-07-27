@@ -10,16 +10,6 @@ ______________________________________________________________________
 
 This extension provides runtime-discoverable tools compatible with OpenAI-style function calling or MCP tool schemas. These tools can be invoked by agents to:
 
-### 📁 File System Tools (`fs_toolkit`)
-
-- `read`: Read file contents from the filesystem
-- `edit`: Edit file contents with search and replace functionality
-- `write`: Write content to a file
-- `search_and_replace`: Search and replace text patterns in files
-- `glob`: Find files matching a glob pattern
-- `grep`: Search for text patterns within file contents
-- `ls`: List directory contents
-
 ### 🧠 Notebook Tools (`nb_toolkit`)
 
 - `read_notebook`: Read entire notebook contents as markdown
@@ -41,10 +31,6 @@ This extension provides runtime-discoverable tools compatible with OpenAI-style 
 - `git_commit`: Commit staged changes with a message
 - `git_add`: Stage files for commit (individually or all)
 - `git_get_repo_root`: Get the root directory of the Git repository
-
-### ⚙️ Code Execution Tools (`exec_toolkit`)
-
-- `bash`: Execute bash commands in the system shell
 
 These tools are ideal for agents that assist users with code editing, version control, or dynamic notebook interaction.
 
