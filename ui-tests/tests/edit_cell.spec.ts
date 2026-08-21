@@ -1,14 +1,14 @@
 import { test, expect } from './base';
 import { callTool } from './mcp-client';
-import { CODE_CELL_1, createAndOpenNotebook } from './fixtures';
+import { buildNotebook } from './fixtures';
 
 // edit_cell: change a cell's content (YDoc-backed). RTC-free default errors.
 test.describe('edit_cell', () => {
   test('changes a cell content', async ({ page, tmpPath, mcp }) => {
-    const path = await createAndOpenNotebook(page, tmpPath);
+    const { path, cellIds } = await buildNotebook(page, tmpPath);
     const res = await callTool(mcp, 'edit_cell', {
       file_path: path,
-      cell_id: CODE_CELL_1,
+      cell_id: cellIds[0],
       content: 'y = 2'
     });
     expect(res.isError, res.text).toBe(false);

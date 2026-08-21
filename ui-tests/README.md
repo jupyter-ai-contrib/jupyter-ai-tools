@@ -52,6 +52,14 @@ One spec file per tool (`read_notebook.spec.ts`, `add_cell.spec.ts`,
 `tests/base.ts` (a galata `test` extended with a worker-scoped `mcp` client),
 `tests/mcp-client.ts`, and `tests/fixtures.ts`.
 
+The notebook fixture (`buildNotebook`) is built *through JupyterLab* via galata
+(`createNew` + `addCell`), not by uploading a hand-crafted .ipynb JSON, and the
+real cell ids are read back from the live model. `tests/base.ts` also disables
+galata's kernels/sessions API mocking: that route handler throws on
+jupyter_server_documents' session/kernel responses during cell execution
+(`Cannot read properties of null (reading 'id')`), which previously failed
+`run_cell`/`run_all_cells` on `+JSD`. With mocking off, both RTC legs are green.
+
 ## Expected results (failing tests are the baseline signal)
 
 * **Read tools** (`read_notebook`, `read_notebook_cells`, `read_cell`,
@@ -66,15 +74,17 @@ One spec file per tool (`read_notebook.spec.ts`, `add_cell.spec.ts`,
   `select_cell`, `create_notebook`): dispatch to the browser via
   `execute_command`; they need a live frontend (which this suite provides).
 
-Locally validated (default leg): all read tools green; write tools correctly
-error on the RTC-free path.
+Locally validated: `+JCollab` and `+JSD` are green (20/20); `default` is the
+RTC-free baseline (10 pass / 10 fail: read tools + `open_file` + `run_all_cells`
++ `create_notebook` pass; write/awareness tools + `run_cell` + `select_cell`
+fail because there is no live YDoc room / awareness without a provider).
 
-## Known JSD finding
+## Resolved: JSD `run_cell` / `run_all_cells`
 
-`run_cell` / `run_all_cells` fail on the `+JSD` leg with an uncaught browser
-`TypeError: Cannot read properties of null (reading 'id')` thrown during cell
-execution. This originates in `jupyterlab-notebook-awareness` (its active-cell
-handler dereferences a null active cell during execution under
-jupyter_server_documents), not in the jupyter-ai tool: removing
-notebook-awareness makes `run_cell` instead fail earlier with `"No active cell
-found"`. It passes on the `+JCollab` leg. Left failing as an upstream finding.
+These previously failed on `+JSD` with an uncaught browser
+`TypeError: Cannot read properties of null (reading 'id')` during cell
+execution. Root cause was **galata's own kernels/sessions API mocking**: its
+route handler chokes on jupyter_server_documents' session/kernel responses (null
+body) once execution triggers session activity. It was not the tool, not the
+notebook construction, and not `jupyterlab-notebook-awareness`. Disabling that
+mocking in `tests/base.ts` makes the real APIs flow and both RTC legs pass.

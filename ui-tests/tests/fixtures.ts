@@ -1,97 +1,59 @@
 /**
  * Shared fixtures for the tool E2E suite.
+ *
+ * The notebook is built the *proper* way -- through JupyterLab via galata
+ * (`createNew` + `addCell`) -- rather than uploading a hand-crafted .ipynb
+ * JSON. This gives a correctly-initialized YNotebook / kernel / active cell,
+ * which the collaboration providers (and jupyterlab-notebook-awareness) expect.
  */
-import { expect } from '@jupyterlab/galata';
 import type { IJupyterLabPageFixture } from '@jupyterlab/galata';
 
-export const CODE_CELL_1 = 'cell-code-0001';
-export const MD_CELL_2 = 'cell-md-0002';
-export const CODE_CELL_3 = 'cell-code-0003';
+const TRANSPORT = process.env.JAI_TRANSPORT || 'default';
 
-// Set by the nox session; 'default' when run standalone.
-export const TRANSPORT = process.env.JAI_TRANSPORT || 'default';
-export const IS_RTC = TRANSPORT === 'jcollab' || TRANSPORT === 'jsd';
-
-/** A minimal but realistic nbformat 4.5 notebook with three cells. */
-export function sampleNotebook(): any {
-  return {
-    cells: [
-      {
-        cell_type: 'code',
-        id: CODE_CELL_1,
-        metadata: {},
-        execution_count: null,
-        outputs: [],
-        source: 'x = 1'
-      },
-      {
-        cell_type: 'markdown',
-        id: MD_CELL_2,
-        metadata: {},
-        source: '# Title'
-      },
-      {
-        cell_type: 'code',
-        id: CODE_CELL_3,
-        metadata: {},
-        execution_count: null,
-        outputs: [],
-        source: 'print(x)'
-      }
-    ],
-    metadata: {
-      kernelspec: {
-        display_name: 'Python 3 (ipykernel)',
-        language: 'python',
-        name: 'python3'
-      },
-      language_info: { name: 'python', version: '3.10' }
-    },
-    nbformat: 4,
-    nbformat_minor: 5
-  };
+export interface BuiltNotebook {
+  /** Server-relative path to the saved notebook. */
+  path: string;
+  /** Real nbformat cell ids, in order: [code "x = 1", md "# Title", code "print(x)"]. */
+  cellIds: string[];
 }
 
 /**
- * Write the sample notebook (via the contents API) into the test's temp
- * directory and return its server-relative path. No browser open -- enough for
- * the filesystem-backed read tools.
+ * Create + open a 3-cell notebook through JupyterLab (not by uploading JSON),
+ * save it, and return its path plus the real cell ids read from the live model.
  */
-export async function writeNotebook(
+export async function buildNotebook(
   page: IJupyterLabPageFixture,
   tmpPath: string,
   name = 'sample.ipynb'
-): Promise<string> {
-  const filePath = `${tmpPath}/${name}`;
-  await page.contents.uploadContent(
-    JSON.stringify(sampleNotebook()),
-    'text',
-    filePath
-  );
-  return filePath;
-}
+): Promise<BuiltNotebook> {
+  await page.filebrowser.openDirectory(tmpPath);
 
-/**
- * Write the sample notebook and open it in the browser. Opening it in
- * JupyterLab is what makes a live YDoc room exist (on RTC legs) and what lets
- * the jupyterlab-commands-toolkit frontend service ``execute_command`` calls.
- * Returns the server-relative path to pass to the tools.
- */
-export async function createAndOpenNotebook(
-  page: IJupyterLabPageFixture,
-  tmpPath: string,
-  name = 'sample.ipynb'
-): Promise<string> {
-  const filePath = await writeNotebook(page, tmpPath, name);
-  const opened = await page.notebook.openByPath(filePath);
-  if (!opened) {
-    throw new Error(`Failed to open notebook: ${filePath}`);
+  await page.notebook.createNew(name, { kernel: 'python3' });
+  await page.notebook.setCell(0, 'code', 'x = 1');
+  await page.notebook.addCell('markdown', '# Title');
+  await page.notebook.addCell('code', 'print(x)');
+
+  // Persist to disk for the filesystem-read tools. galata's save() (context
+  // .save()) hangs under jupyter_server_documents, but JSD autosaves the YDoc
+  // to disk; on the other legs save explicitly.
+  if (TRANSPORT === 'jsd') {
+    await page.waitForTimeout(3000);
+  } else {
+    await page.notebook.save();
   }
-  // Wait for the notebook (and, on RTC legs, its collaborative YDoc room) to
-  // finish loading all cells. Server-side tools that resolve a cell by id
-  // otherwise race the async room load and fail to find the cell.
-  await expect
-    .poll(async () => page.notebook.getCellCount(), { timeout: 15000 })
-    .toBe(sampleNotebook().cells.length);
-  return filePath;
+
+  const path = `${tmpPath}/${name}`;
+
+  const cellIds = await page.evaluate(() => {
+    const app = (window as any).jupyterapp;
+    const panel: any = app.shell.currentWidget;
+    const cells = panel.content.model.cells;
+    const ids: string[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      ids.push(cells.get(i).id);
+    }
+    return ids;
+  });
+
+  return { path, cellIds };
 }

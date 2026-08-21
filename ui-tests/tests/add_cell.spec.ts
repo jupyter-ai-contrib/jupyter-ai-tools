@@ -1,12 +1,12 @@
 import { test, expect } from './base';
 import { callTool } from './mcp-client';
-import { CODE_CELL_1, createAndOpenNotebook } from './fixtures';
+import { buildNotebook } from './fixtures';
 
 // add_cell: add a cell above/below a reference cell (YDoc-backed). Verified via
 // the browser notebook model. On the RTC-free default leg this errors.
 test.describe('add_cell', () => {
   test('appends a cell at the end', async ({ page, tmpPath, mcp }) => {
-    const path = await createAndOpenNotebook(page, tmpPath);
+    const { path } = await buildNotebook(page, tmpPath);
     const res = await callTool(mcp, 'add_cell', {
       file_path: path,
       content: 'appended = True'
@@ -20,11 +20,11 @@ test.describe('add_cell', () => {
     tmpPath,
     mcp
   }) => {
-    const path = await createAndOpenNotebook(page, tmpPath);
+    const { path, cellIds } = await buildNotebook(page, tmpPath);
     const res = await callTool(mcp, 'add_cell', {
       file_path: path,
       content: '## note',
-      cell_id: CODE_CELL_1,
+      cell_id: cellIds[0],
       add_above: true,
       cell_type: 'markdown'
     });
