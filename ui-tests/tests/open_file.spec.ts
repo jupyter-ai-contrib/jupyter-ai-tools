@@ -52,34 +52,39 @@ test.describe('open_file', () => {
     expect(await currentPath(page)).toBe(path);
   });
 
-  // Opening nb1, then nb2, then nb1 again should reveal nb1's existing tab
-  // rather than open a second copy of it.
-  test('does not duplicate an already-open document', async ({
-    page,
-    tmpPath,
-    mcp
-  }) => {
+  // Opening nb1, then nb2, then nb1 again should reveal (focus) nb1's existing
+  // tab rather than open a second copy.
+  test('reveals an already-open document', async ({ page, tmpPath, mcp }) => {
     // Build nb1 the proper way (created + opened).
     const { path: nb1 } = await buildNotebook(page, tmpPath, 'nb1.ipynb');
 
     // Create nb2 on disk via the contents API (a second galata createNew hangs
-    // on the kernel dialog), then open it through the tool under test.
+    // on the kernel dialog). Include a kernelspec so opening it does not pop a
+    // "Select Kernel" modal -- that dialog would steal focus and mask the
+    // reveal behavior under test.
     const nb2 = `${tmpPath}/nb2.ipynb`;
     await page.evaluate(async (p: string) => {
       const app = (window as any).jupyterapp;
       await app.serviceManager.contents.save(p, {
         type: 'notebook',
         format: 'json',
-        content: { cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }
+        content: {
+          cells: [],
+          metadata: { kernelspec: { name: 'python3', display_name: 'Python 3' } },
+          nbformat: 4,
+          nbformat_minor: 5
+        }
       });
     }, nb2);
     const openNb2 = await callTool(mcp, 'open_file', { file_path: nb2 });
     expect(openNb2.isError, openNb2.text).toBe(false);
+    await expect.poll(() => currentPath(page)).toBe(nb2);
 
     // Re-open nb1 while nb2 is the active tab: docmanager:open -> openOrReveal
-    // reuses the existing widget, so there is still exactly one tab per file.
+    // reuses the existing widget (no duplicate) and brings it to the front.
     const res = await callTool(mcp, 'open_file', { file_path: nb1 });
     expect(res.isError, res.text).toBe(false);
+    await expect.poll(() => currentPath(page)).toBe(nb1);
     expect(await openTabCount(page, nb1)).toBe(1);
     expect(await openTabCount(page, nb2)).toBe(1);
   });
