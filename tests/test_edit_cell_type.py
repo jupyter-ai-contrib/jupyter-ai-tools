@@ -10,6 +10,21 @@ import pytest
 
 from jupyter_ai_tools.toolkits.notebook import edit_cell
 
+
+@pytest.fixture(autouse=True)
+def _assume_rtc_available():
+    """These tests exercise edit_cell's RTC-mode logic (YDoc / nbformat paths).
+
+    Without a live server ``rtc_available()`` is False, which would route
+    edit_cell to jupyterlab-ai-commands instead; force it True so the tested
+    code path runs. (RTC-free behavior is covered by the E2E suite.)
+    """
+    with patch(
+        "jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=True
+    ):
+        yield
+
+
 # ── Helpers ──
 
 
