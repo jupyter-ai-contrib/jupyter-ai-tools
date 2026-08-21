@@ -3,11 +3,37 @@
 Boots JupyterLab (galata defaults) plus ``jupyter-server-mcp`` serving the
 jupyter-ai default toolkit. Ports come from the ``jlpm start`` CLI args set in
 ``playwright.config.js`` (``--ServerApp.port`` / ``--MCPExtensionApp.mcp_port``).
+
+The collaboration provider is selected by ``JAI_TRANSPORT`` (set by the nox
+session): ``default`` (none), ``jcollab`` (jupyter_collaboration), or ``jsd``
+(jupyter_server_documents). We enable the matching server extensions explicitly
+so the environment is unambiguous; ``jupyter_server_fileid`` is required by both
+RTC providers (it supplies ``settings['file_id_manager']``).
 """
+
+import os
 
 from jupyterlab.galata import configure_jupyter_server
 
 configure_jupyter_server(c)  # noqa: F821
+
+transport = os.environ.get("JAI_TRANSPORT", "default")
+
+# Explicitly enable the transport's server extensions for the current matrix
+# branch. (The RTC-free `default` leg enables nothing extra.) Use the traitlets
+# LazyConfigValue.update() idiom -- do NOT dict()/reassign, which raises.
+if transport == "jcollab":
+    c.ServerApp.jpserver_extensions.update(  # noqa: F821
+        {
+            "jupyter_collaboration": True,
+            "jupyter_server_ydoc": True,
+            "jupyter_server_fileid": True,
+        }
+    )
+elif transport == "jsd":
+    c.ServerApp.jpserver_extensions.update(  # noqa: F821
+        {"jupyter_server_documents": True, "jupyter_server_fileid": True}
+    )
 
 # --- jupyter-server-mcp: serve the jupyter-ai default toolkit -------------
 # We register the tool list explicitly (instead of relying on the jupyter-ai

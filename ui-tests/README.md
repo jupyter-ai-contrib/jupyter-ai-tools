@@ -45,6 +45,13 @@ cd ui-tests && jlpm install && jlpm playwright install chromium
 JAI_TRANSPORT=default jlpm playwright test
 ```
 
+## Structure
+
+One spec file per tool (`read_notebook.spec.ts`, `add_cell.spec.ts`,
+`get_active_notebook.spec.ts`, `run_cell.spec.ts`, ...). Shared setup lives in
+`tests/base.ts` (a galata `test` extended with a worker-scoped `mcp` client),
+`tests/mcp-client.ts`, and `tests/fixtures.ts`.
+
 ## Expected results (failing tests are the baseline signal)
 
 * **Read tools** (`read_notebook`, `read_notebook_cells`, `read_cell`,
@@ -61,3 +68,13 @@ JAI_TRANSPORT=default jlpm playwright test
 
 Locally validated (default leg): all read tools green; write tools correctly
 error on the RTC-free path.
+
+## Known JSD finding
+
+`run_cell` / `run_all_cells` fail on the `+JSD` leg with an uncaught browser
+`TypeError: Cannot read properties of null (reading 'id')` thrown during cell
+execution. This originates in `jupyterlab-notebook-awareness` (its active-cell
+handler dereferences a null active cell during execution under
+jupyter_server_documents), not in the jupyter-ai tool: removing
+notebook-awareness makes `run_cell` instead fail earlier with `"No active cell
+found"`. It passes on the `+JCollab` leg. Left failing as an upstream finding.
