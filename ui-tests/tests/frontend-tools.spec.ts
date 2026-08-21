@@ -2,7 +2,7 @@ import { expect, test } from '@jupyterlab/galata';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 import { callTool, connectMcp } from './mcp-client';
-import { CODE_CELL_1, createAndOpenNotebook } from './fixtures';
+import { CODE_CELL_1, CODE_CELL_3, createAndOpenNotebook } from './fixtures';
 
 /**
  * Frontend-command tools dispatch to the JupyterLab frontend via
@@ -55,8 +55,11 @@ test.describe('frontend-command tools', () => {
 
   test('select_cell moves the selection', async ({ page, tmpPath }) => {
     const path = await createAndOpenNotebook(page, tmpPath);
+    // select_cell navigates *from* the current active cell, so establish one
+    // first (this also publishes activeCellId into awareness).
+    await page.notebook.selectCells(0);
     const res = await callTool(client, 'select_cell', {
-      cell_id: CODE_CELL_1,
+      cell_id: CODE_CELL_3,
       file_path: path
     });
     expect(res.isError).toBe(false);

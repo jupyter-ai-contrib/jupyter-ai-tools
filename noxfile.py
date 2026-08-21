@@ -32,10 +32,16 @@ nox.options.default_venv_backend = "uv|virtualenv"
 
 # env name -> extra packages that provide the transport.
 # Floors mirror the validated jupyter-ai-router / acp-client RTC matrix.
+#
+# jupyterlab-notebook-awareness is the frontend extension that publishes the
+# active cell / notebook path into collaboration awareness. The awareness-based
+# tools (get_active_cell_id, select_cell, run_cell) read those fields, so it is
+# required in the RTC environments; on the RTC-free ``default`` leg there is no
+# awareness to publish into.
 _ENVS = {
     "default": [],
-    "jcollab": ["jupyter_collaboration>=4,<5"],
-    "jsd": ["jupyter_server_documents"],
+    "jcollab": ["jupyter_collaboration>=4,<5", "jupyterlab-notebook-awareness"],
+    "jsd": ["jupyter_server_documents", "jupyterlab-notebook-awareness"],
 }
 
 

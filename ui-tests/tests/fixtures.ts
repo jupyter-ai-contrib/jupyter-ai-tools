@@ -1,6 +1,7 @@
 /**
  * Shared fixtures for the tool E2E suite.
  */
+import { expect } from '@jupyterlab/galata';
 import type { IJupyterLabPageFixture } from '@jupyterlab/galata';
 
 export const CODE_CELL_1 = 'cell-code-0001';
@@ -86,5 +87,11 @@ export async function createAndOpenNotebook(
   if (!opened) {
     throw new Error(`Failed to open notebook: ${filePath}`);
   }
+  // Wait for the notebook (and, on RTC legs, its collaborative YDoc room) to
+  // finish loading all cells. Server-side tools that resolve a cell by id
+  // otherwise race the async room load and fail to find the cell.
+  await expect
+    .poll(async () => page.notebook.getCellCount(), { timeout: 15000 })
+    .toBe(sampleNotebook().cells.length);
   return filePath;
 }

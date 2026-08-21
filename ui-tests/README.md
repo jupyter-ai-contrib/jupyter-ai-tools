@@ -26,9 +26,14 @@ is chosen purely by which package is installed):
 
 ```bash
 nox -s "e2e(env='default')"    # no RTC provider (RTC-free target)
-nox -s "e2e(env='jcollab')"    # jupyter_collaboration
-nox -s "e2e(env='jsd')"        # jupyter_server_documents
+nox -s "e2e(env='jcollab')"    # jupyter_collaboration + jupyterlab-notebook-awareness
+nox -s "e2e(env='jsd')"        # jupyter_server_documents + jupyterlab-notebook-awareness
 ```
+
+The RTC legs also install `jupyterlab-notebook-awareness`, the frontend
+extension that publishes the active cell id / notebook path into collaboration
+awareness. The awareness tools (`get_active_cell_id`, `select_cell`,
+`run_cell`) read those fields, so it is required for them to work.
 
 CI runs all three as the **E2E** workflow, rendering as
 `E2E / E2E tests (default)`, `E2E tests (+JCollab)`, `E2E tests (+JSD)`.

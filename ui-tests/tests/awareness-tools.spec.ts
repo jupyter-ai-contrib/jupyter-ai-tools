@@ -36,10 +36,13 @@ test.describe('awareness tools', () => {
     page,
     tmpPath
   }) => {
-    const path = await createAndOpenNotebook(page, tmpPath);
+    await createAndOpenNotebook(page, tmpPath);
     const res = await callTool(client, 'get_open_documents', {});
     expect(res.isError).toBe(false);
-    expect(res.text).toContain(path);
+    // Global awareness is shared across the session; assert it reports an open
+    // notebook (all suites open a file named sample.ipynb) rather than an exact
+    // per-test path.
+    expect(res.text).toContain('sample.ipynb');
   });
 
   test('get_active_cell_id reports the selected cell', async ({
