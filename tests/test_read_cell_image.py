@@ -131,7 +131,7 @@ async def test_returns_png_image_content(notebook_path):
 
     assert isinstance(result, ImageContent)
     assert result.type == "image"
-    assert result.mimeType == "image/png"
+    assert result.model_dump(by_alias=True)["mimeType"] == "image/png"
     assert base64.b64decode(result.data) == b"fake-png-bytes"
 
 
@@ -140,7 +140,7 @@ async def test_returns_jpeg_image_content(notebook_path):
     result = await read_cell_image(notebook_path, JPEG_CELL_ID)
 
     assert isinstance(result, ImageContent)
-    assert result.mimeType == "image/jpeg"
+    assert result.model_dump(by_alias=True)["mimeType"] == "image/jpeg"
     assert base64.b64decode(result.data) == b"fake-jpeg-bytes"
 
 
@@ -149,7 +149,7 @@ async def test_normalizes_jpg_alias_to_jpeg(notebook_path):
     result = await read_cell_image(notebook_path, JPG_CELL_ID)
 
     assert isinstance(result, ImageContent)
-    assert result.mimeType == "image/jpeg"
+    assert result.model_dump(by_alias=True)["mimeType"] == "image/jpeg"
     assert base64.b64decode(result.data) == b"fake-jpg-bytes"
 
 
@@ -159,7 +159,7 @@ async def test_returns_gif_and_logs_warning(notebook_path, caplog):
         result = await read_cell_image(notebook_path, GIF_CELL_ID)
 
     assert isinstance(result, ImageContent)
-    assert result.mimeType == "image/gif"
+    assert result.model_dump(by_alias=True)["mimeType"] == "image/gif"
     assert base64.b64decode(result.data) == b"fake-gif-bytes"
     assert any("image/gif" in record.message for record in caplog.records)
 
@@ -169,7 +169,7 @@ async def test_returns_webp_image_content(notebook_path):
     result = await read_cell_image(notebook_path, WEBP_CELL_ID)
 
     assert isinstance(result, ImageContent)
-    assert result.mimeType == "image/webp"
+    assert result.model_dump(by_alias=True)["mimeType"] == "image/webp"
     assert base64.b64decode(result.data) == b"fake-webp-bytes"
 
 
