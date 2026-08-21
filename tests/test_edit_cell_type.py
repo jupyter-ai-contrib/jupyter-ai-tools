@@ -19,9 +19,7 @@ def _assume_rtc_available():
     edit_cell to jupyterlab-ai-commands instead; force it True so the tested
     code path runs. (RTC-free behavior is covered by the E2E suite.)
     """
-    with patch(
-        "jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=True
-    ):
+    with patch("jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=True):
         yield
 
 
