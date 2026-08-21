@@ -30,6 +30,9 @@ dependencies = [
   "pycrdt",
   "jupyter_ydoc",
   "jupyterlab-commands-toolkit",
+  # Provides the frontend commands the tools drive when no RTC provider is
+  # active (the RTC-free fallback).
+  "jupyterlab-ai-commands",
 ]
 
 

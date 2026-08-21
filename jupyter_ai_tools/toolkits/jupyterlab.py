@@ -4,7 +4,7 @@ from typing import Optional
 
 from jupyterlab_commands_toolkit.tools import execute_command
 
-from ..utils import get_serverapp
+from ..utils import get_serverapp, rtc_available, run_lab_command
 
 
 async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) -> dict:
@@ -104,6 +104,18 @@ async def run_cell(
         dict with `success` (bool) and optional `error` or `result` fields.
     """
     from .notebook import select_cell
+
+    if not rtc_available():
+        # RTC-free: jupyterlab-ai-commands run-cell targets the cell by id and
+        # opens the notebook itself, so no awareness-based select is needed.
+        return await _run_with_timeout(
+            run_lab_command(
+                "jupyterlab-ai-commands:run-cell",
+                {"notebookPath": file_path, "cellId": cell_id},
+            ),
+            timeout,
+            "Cell execution started",
+        )
 
     if file_path:
         result = await open_file(file_path)

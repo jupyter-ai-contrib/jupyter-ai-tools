@@ -88,3 +88,25 @@ route handler chokes on jupyter_server_documents' session/kernel responses (null
 body) once execution triggers session activity. It was not the tool, not the
 notebook construction, and not `jupyterlab-notebook-awareness`. Disabling that
 mocking in `tests/base.ts` makes the real APIs flow and both RTC legs pass.
+
+## RTC-free implementation
+
+When no RTC provider is active (`utils.rtc_available()` is false), the tools no
+longer touch the YDoc/awareness layer. Instead they drive the JupyterLab
+frontend through `jupyterlab-ai-commands` (via `jupyterlab-commands-toolkit`).
+On the `default` leg this makes 19/20 tools pass:
+
+* `add_cell`, `insert_cell`, `delete_cell`, `edit_cell` -> `jupyterlab-ai-commands`
+  cell commands (insert maps an index to a reference cell + position).
+* `run_cell` -> `jupyterlab-ai-commands:run-cell` (no awareness-based select).
+* `get_active_notebook` / `get_active_cell_id` -> `get-notebook-info`.
+* `select_cell` -> no-op (cells are targeted by id directly, no cursor move).
+* read tools + `open_file` + `run_all_cells` + `create_notebook` were already
+  RTC-free.
+
+Known gap (no RTC-free equivalent): `get_open_documents` — nothing in
+`jupyterlab-ai-commands` lists the set of open documents. It is skipped on the
+`default` leg and only runs on the RTC legs.
+
+Not fully equivalent RTC-free: `edit_cell` cannot change a cell's *type*
+(`set-cell-content` only sets the source); a type-only change returns an error.
