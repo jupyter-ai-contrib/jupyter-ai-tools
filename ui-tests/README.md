@@ -98,15 +98,36 @@ On the `default` leg this makes 19/20 tools pass:
 
 * `add_cell`, `insert_cell`, `delete_cell`, `edit_cell` -> `jupyterlab-ai-commands`
   cell commands (insert maps an index to a reference cell + position).
-* `run_cell` -> `jupyterlab-ai-commands:run-cell` (no awareness-based select).
+* `run_cell` -> `jupyterlab-ai-commands:run-cell`.
 * `get_active_notebook` / `get_active_cell_id` -> `get-notebook-info`.
-* `select_cell` -> no-op (cells are targeted by id directly, no cursor move).
+* `select_cell` -> reads the current + target cell from `get-notebook-info` and
+  navigates with the core `notebook:move-cursor-up`/`-down` commands (the same
+  ones the RTC path uses), so it actually moves the selection.
+* `edit_cell` cell-type change -> selects the cell, then runs the core
+  `notebook:change-cell-to-code`/`-markdown`/`-raw` command.
 * read tools + `open_file` + `run_all_cells` + `create_notebook` were already
   RTC-free.
 
-Known gap (no RTC-free equivalent): `get_open_documents` — nothing in
-`jupyterlab-ai-commands` lists the set of open documents. It is skipped on the
-`default` leg and only runs on the RTC legs.
+To keep the two paths in agreement, the RTC (YDoc) `add_cell`/`insert_cell` now
+also replace a single empty first cell instead of appending (matching
+`jupyterlab-ai-commands`).
 
-Not fully equivalent RTC-free: `edit_cell` cannot change a cell's *type*
-(`set-cell-content` only sets the source); a type-only change returns an error.
+### Remaining RTC-free divergences (parity gaps)
+
+* `get_open_documents` — no `jupyterlab-ai-commands` (or core) command
+  enumerates the open documents, so this has no RTC-free equivalent. Skipped on
+  the `default` leg; only runs on the RTC legs. Needs a new upstream command.
+* Numeric-index `cell_id` (e.g. `"0"`) is not supported RTC-free for
+  `add_cell`/`delete_cell`/`edit_cell`/`run_cell`: RTC resolves it via
+  `_resolve_cell_id`, but the RTC-free path passes it straight to
+  `jupyterlab-ai-commands`, which expects an nbformat cell id.
+* Return shapes differ: RTC returns `None`/`{"success": True}`; RTC-free returns
+  the `execute_command`/ai-commands result dict.
+* Multiple clients: RTC-free routes through `jupyterlab-commands-toolkit`, which
+  broadcasts to every connected browser and resolves on the first response.
+  Queries are non-deterministic (whoever answers first) and mutations run in
+  each client's own (unshared) model. RTC operates on the one server-side YDoc
+  and is deterministic regardless of client count.
+* Read-after-write timing: RTC-free writes hit the frontend model and are not
+  promptly persisted to disk (no provider autosave), so the disk-reading read
+  tools can lag until a manual/classic autosave; RTC autosaves within ~1s.

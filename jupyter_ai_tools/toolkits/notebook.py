@@ -493,6 +493,25 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         raise
 
 
+def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
+    """True iff the notebook has exactly one cell and it is empty.
+
+    Mirrors jupyterlab-ai-commands' add-cell behavior, which replaces a lone
+    empty first cell instead of appending a new one, so the RTC and RTC-free
+    paths agree.
+    """
+    try:
+        cells = ydoc.get().get("cells", [])
+        if len(cells) != 1:
+            return False
+        source = cells[0].get("source", "")
+        if isinstance(source, list):
+            source = "".join(source)
+        return not source.strip()
+    except Exception:
+        return False
+
+
 async def add_cell(
     file_path: str,
     content: Optional[str] = None,
@@ -560,7 +579,12 @@ async def add_cell(
                 cell["execution_count"] = None
                 cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
-            if insert_index >= cells_count:
+            if _is_single_empty_notebook(ydoc):
+                # Match jupyterlab-ai-commands: replace a single empty first
+                # cell instead of adding a new one.
+                del ydoc.ycells[0]
+                ydoc.ycells.append(ycell)
+            elif insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
@@ -666,7 +690,10 @@ async def insert_cell(
                 cell["execution_count"] = None
                 cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
-            if insert_index >= cells_count:
+            if _is_single_empty_notebook(ydoc):
+                del ydoc.ycells[0]
+                ydoc.ycells.append(ycell)
+            elif insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
@@ -1273,12 +1300,31 @@ async def select_cell(
     from jupyterlab_commands_toolkit.tools import execute_command
 
     if not rtc_available():
-        # RTC-free: jupyterlab-ai-commands targets cells by id directly, so an
-        # explicit cursor-based selection step is unnecessary.
-        return {
-            "success": True,
-            "result": "select_cell is a no-op without RTC (cells are targeted by id)",
-        }
+        # RTC-free: read the current + target cell from the frontend
+        # (get-notebook-info), then navigate with the same core move-cursor
+        # commands the RTC path uses.
+        target_path = file_path or await get_active_notebook(username)
+        if not target_path:
+            raise RuntimeError("No active notebook found. Please open a notebook first.")
+        info = await run_lab_command(
+            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": target_path}
+        )
+        info_result = (info or {}).get("result") or {}
+        cells = info_result.get("cells") or []
+        ids = [c.get("cellId") for c in cells]
+        if cell_id not in ids:
+            raise ValueError(f"Cell with ID {cell_id} not found in notebook")
+        target_index = ids.index(cell_id)
+        active_id = info_result.get("activeCellId")
+        active_index = ids.index(active_id) if active_id in ids else 0
+        distance = target_index - active_index
+        if distance == 0:
+            return {"success": True, "result": "Already at target cell"}
+        cmd = "notebook:move-cursor-down" if distance > 0 else "notebook:move-cursor-up"
+        move_result: dict = {}
+        for _ in range(abs(distance)):
+            move_result = await execute_command(cmd)
+        return move_result
 
     try:
         if not file_path:
@@ -1361,22 +1407,27 @@ async def edit_cell(
         ValueError: If the cell_id is not found in the notebook.
     """
     if not rtc_available():
-        if content is None:
-            # RTC-free set-cell-content only changes the source; a pure
-            # cell-type change has no jupyterlab-ai-commands equivalent.
-            return {
-                "success": False,
-                "error": "cell-type change without new content is not supported without RTC",
-            }
-        return await run_lab_command(
-            "jupyterlab-ai-commands:set-cell-content",
-            {
-                "notebookPath": file_path,
-                "cellId": cell_id,
-                "content": content,
-                "showDiff": False,
-            },
-        )
+        rtc_free_result: dict = {"success": True}
+        if content is not None:
+            rtc_free_result = await run_lab_command(
+                "jupyterlab-ai-commands:set-cell-content",
+                {
+                    "notebookPath": file_path,
+                    "cellId": cell_id,
+                    "content": content,
+                    "showDiff": False,
+                },
+            )
+        if cell_type is not None:
+            # change-cell-to-* act on the selected cell, so select it first.
+            await select_cell(cell_id, file_path=file_path)
+            type_command = {
+                "code": "notebook:change-cell-to-code",
+                "markdown": "notebook:change-cell-to-markdown",
+                "raw": "notebook:change-cell-to-raw",
+            }[cell_type]
+            rtc_free_result = await run_lab_command(type_command)
+        return rtc_free_result
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
