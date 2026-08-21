@@ -29,10 +29,16 @@ dependencies = [
   "jupyter_server>=1.6,<3",
   "pycrdt",
   "jupyter_ydoc",
+  "jupyterlab-commands-toolkit",
 ]
 
 
 [project.optional-dependencies]
+# Extras that enable the collaborative (RTC) experience. jupyterlab-notebook-
+# awareness publishes the active cell / notebook path into collaboration
+# awareness, which the awareness-based tools (get_active_cell_id, select_cell,
+# run_cell) read.
+rtc = ["jupyterlab-notebook-awareness"]
 mcp = ["mcp>=1.0"]
 test = ["pytest>=7.0", "pytest-jupyter[server]>=0.6", "pytest-asyncio", "mcp>=1.0"]
 lint = [

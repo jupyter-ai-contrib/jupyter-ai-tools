@@ -50,14 +50,14 @@ _ENVS = {
 def e2e(session: nox.Session, env: str) -> None:
     """Run the tool E2E suite against one transport."""
     # The package under test: prebuilt wheel from a CI build job, else source.
+    # jupyterlab-commands-toolkit is now a runtime dependency of the package, so
+    # it is pulled in automatically; the RTC legs add jupyterlab-notebook-
+    # awareness (the package's ``rtc`` extra) via _ENVS.
     target = os.environ.get("E2E_WHEEL") or "."
-    # A local jupyterlab-commands-toolkit checkout may override the PyPI dist.
-    jlct = os.environ.get("JLCT_PATH", "jupyterlab-commands-toolkit")
 
     session.install(
         "jupyterlab>=4.0.0,<5",
         "jupyter-server-mcp",
-        jlct,
         target,
         *_ENVS[env],
     )
