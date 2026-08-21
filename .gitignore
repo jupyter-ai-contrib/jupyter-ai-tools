@@ -103,3 +103,6 @@ dmypy.json
 
 # Auto-generated _version.py module
 jupyter_ai_tools/_version.py
+
+# Local RTC test artifacts
+.jupyter_ystore.db

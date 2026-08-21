@@ -445,7 +445,12 @@ async def read_cell_image(
             # Normalize the non-standard image/jpg alias to image/jpeg.
             reported_mime = "image/jpeg" if mime_type == "image/jpg" else mime_type
             # NOTE: Returns on first match. Multi-image support tracked in issue #27.
-            return ImageContent(type="image", data=payload, mimeType=reported_mime)
+            # Build via model_validate with the JSON key so this works across
+            # mcp versions: older mcp names the field ``mimeType``; newer mcp
+            # renamed it to ``mime_type`` with ``mimeType`` as the alias.
+            return ImageContent.model_validate(
+                {"type": "image", "data": payload, "mimeType": reported_mime}
+            )
 
     return None
 
