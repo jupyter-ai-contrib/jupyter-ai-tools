@@ -67,9 +67,8 @@ jupyter_server_documents' session/kernel responses during cell execution
 * **Write tools** (`add_cell`, `insert_cell`, `delete_cell`, `edit_cell`): pass
   on RTC legs (live YDoc); on `default` they error in `utils.get_room`
   (`KeyError: 'jupyter_server_ydoc'`) — the RTC-free path is currently broken.
-* **Awareness tools** (`get_active_notebook`, `get_open_documents`,
-  `get_active_cell_id`): depend on collaboration awareness; expected to pass
-  only where a provider populates it.
+* **Awareness tools** (`get_active_notebook`, `get_active_cell_id`): depend on
+  collaboration awareness; expected to pass only where a provider populates it.
 * **Frontend-command tools** (`open_file`, `run_cell`, `run_all_cells`,
   `select_cell`, `create_notebook`): dispatch to the browser via
   `execute_command`; they need a live frontend (which this suite provides).
@@ -94,7 +93,7 @@ mocking in `tests/base.ts` makes the real APIs flow and both RTC legs pass.
 When no RTC provider is active (`utils.rtc_available()` is false), the tools no
 longer touch the YDoc/awareness layer. Instead they drive the JupyterLab
 frontend through `jupyterlab-ai-commands` (via `jupyterlab-commands-toolkit`).
-On the `default` leg this makes 19/20 tools pass:
+On the `default` leg every tool then passes:
 
 * `add_cell`, `insert_cell`, `delete_cell`, `edit_cell` -> `jupyterlab-ai-commands`
   cell commands (insert maps an index to a reference cell + position).
@@ -114,13 +113,24 @@ also replace a single empty first cell instead of appending (matching
 
 ### Remaining RTC-free divergences (parity gaps)
 
-* `get_open_documents` — no `jupyterlab-ai-commands` (or core) command
-  enumerates the open documents, so this has no RTC-free equivalent. Skipped on
-  the `default` leg; only runs on the RTC legs. Needs a new upstream command.
-* Numeric-index `cell_id` (e.g. `"0"`) is not supported RTC-free for
-  `add_cell`/`delete_cell`/`edit_cell`/`run_cell`: RTC resolves it via
-  `_resolve_cell_id`, but the RTC-free path passes it straight to
-  `jupyterlab-ai-commands`, which expects an nbformat cell id.
+### Dropped for RTC-free parity (intentional breaking changes)
+
+Two capabilities had no RTC-free equivalent and were removed so the toolkit
+behaves identically with or without a provider:
+
+* `get_open_documents` — nothing outside collaboration awareness enumerates the
+  set of open documents, and no core / `jupyterlab-ai-commands` command exposes
+  it. The tool is removed. Agents open documents directly with `open_file`,
+  which is idempotent (it reveals an already-open tab rather than duplicating).
+* Numeric-index `cell_id` (e.g. `"0"`) — cells are now addressed only by their
+  nbformat id. Indices shift on every add/delete and, RTC-free, resolving one
+  from disk can read a stale notebook, so index targeting was a correctness
+  footgun. Use `get_cell_id_from_index` to map an index to an id, or read the
+  ordered ids from `read_notebook` / `read_notebook_cells`. `read_notebook`'s
+  markdown now includes each cell's `id` in its metadata block.
+
+### Remaining RTC-free divergences
+
 * Return shapes differ: RTC returns `None`/`{"success": True}`; RTC-free returns
   the `execute_command`/ai-commands result dict.
 * Multiple clients: RTC-free routes through `jupyterlab-commands-toolkit`, which

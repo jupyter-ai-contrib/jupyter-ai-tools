@@ -90,7 +90,7 @@ async def run_cell(
         - `cell_id` only: Run a specific cell in the currently active notebook.
 
     Args:
-        cell_id: The UUID of the cell to run, or a numeric index as string.
+        cell_id: The nbformat id of the cell to run.
         file_path: Path to the notebook file. If provided, the notebook is
                    opened/focused before running and used to resolve the cell.
                    If None, the user's active notebook is used.

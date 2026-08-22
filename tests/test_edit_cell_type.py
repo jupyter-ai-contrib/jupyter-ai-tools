@@ -70,11 +70,6 @@ def _ydoc_path(ydoc, resolved_cell_id="cell-1", cell_index=0):
             return_value=cell_index,
         ),
         patch("jupyter_ai_tools.toolkits.notebook.normalize_filepath", side_effect=lambda x: x),
-        patch(
-            "jupyter_ai_tools.toolkits.notebook._resolve_cell_id",
-            new_callable=AsyncMock,
-            return_value=resolved_cell_id,
-        ),
     ):
         yield
 
@@ -300,19 +295,6 @@ class TestEditCellTypeNbformat:
             assert result.source == "1+1"
             assert "outputs" not in result
             assert "execution_count" not in result
-        finally:
-            os.unlink(path)
-
-    @pytest.mark.asyncio
-    async def test_cell_index_as_string(self, code_cell):
-        """cell_id can be a numeric index string like '0'."""
-        path = _make_notebook(code_cell)
-        try:
-            with _nbformat_path():
-                await edit_cell(path, "0", cell_type="markdown")
-
-            cell = _read_notebook(path).cells[0]
-            assert cell.cell_type == "markdown"
         finally:
             os.unlink(path)
 

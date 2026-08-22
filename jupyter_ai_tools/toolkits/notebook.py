@@ -3,7 +3,6 @@ import difflib
 import json
 import logging
 import os
-import re
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -27,45 +26,6 @@ if TYPE_CHECKING:
     from mcp.types import ImageContent
 
 logger = logging.getLogger(__name__)
-
-
-def _is_uuid_like(value: str) -> bool:
-    """Check if a string looks like a UUID v4"""
-    if not isinstance(value, str):
-        return False
-    # UUID v4 pattern: 8-4-4-4-12 hexadecimal characters
-    uuid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-
-
-def _is_index_like(value: str) -> bool:
-    """Check if a string looks like a numeric index"""
-    if not isinstance(value, str):
-        return False
-    try:
-        int(value)
-        return True
-    except ValueError:
-        return False
-
-
-async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
-    """
-    Resolve a cell_id parameter that might be either a UUID or an index.
-    If it's an index, convert it to the actual cell_id.
-    """
-    if _is_uuid_like(cell_id_or_index):
-        return cell_id_or_index
-    elif _is_index_like(cell_id_or_index):
-        index = int(cell_id_or_index)
-        try:
-            actual_cell_id = await get_cell_id_from_index(file_path, index)
-            return actual_cell_id
-        except Exception as e:
-            raise ValueError(f"Invalid cell index {index}: {str(e)}")
-    else:
-        # Assume it's a cell_id and let the downstream function handle validation
-        return cell_id_or_index
 
 
 def clean_text(text: Union[str, list, None]) -> Optional[str]:
@@ -278,7 +238,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
         include_outputs:
             If True, cell outputs will be included in the markdown. Default is True.
 
@@ -291,7 +251,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
         cell_md = cell_to_md(cell, cell_index)
         return cell_md
@@ -309,7 +269,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
 
     Returns:
         A tuple containing:
@@ -322,7 +282,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
         notebook_json = await read_notebook_json(file_path)
         cell_index = _get_cell_index_from_id_json(notebook_json, resolved_cell_id)
 
@@ -381,7 +341,7 @@ async def read_cell_image(
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
         output_index:
             If provided, inspect only that single output. If None (default),
             scan all outputs and return the first supported image found.
@@ -533,7 +493,7 @@ async def add_cell(
         content:
             The content of the new cell. If None, an empty cell is created.
         cell_id:
-            The UUID of the cell to add relative to, or a numeric index as string. If None,
+            The nbformat id of the cell to add relative to. If None,
             the cell is added at the end of the notebook.
         add_above:
             If True, the cell is added above the specified cell. If False,
@@ -559,7 +519,7 @@ async def add_cell(
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id) if cell_id else None
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc: YNotebook = await get_jupyter_ydoc(file_id)
@@ -733,7 +693,7 @@ async def delete_cell(file_path: str, cell_id: str):
 
     Args:
         file_path: The relative path to the notebook file on the filesystem.
-        cell_id: The UUID of the cell to delete, or a numeric index as string.
+        cell_id: The nbformat id of the cell to delete.
 
     Returns:
         None
@@ -746,7 +706,7 @@ async def delete_cell(file_path: str, cell_id: str):
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1253,39 +1213,13 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
     return _get_active_cell_id_from_ydoc(ydoc, username)
 
 
-async def get_open_documents(username: Optional[str] = None) -> Optional[List[str]]:
-    """Returns all open documents for the user, excluding chat files.
-
-    Args:
-        username: Optional username to return a specific user's open documents
-
-    Returns:
-        List of file paths for all open documents (excluding .chat files).
-        Returns None if no documents are found or awareness is unavailable.
-    """
-    awareness = await get_global_awareness()
-    if not awareness:
-        return None
-
-    for _, state in awareness.states.items():
-        _username = state.get("user", {}).get("username", None)
-        if username and username != _username:
-            continue
-
-        if documents := state.get("documents"):
-            filtered_documents = [doc for doc in documents if not doc.endswith('.chat')]
-            return filtered_documents if filtered_documents else None
-
-    return None
-
-
 async def select_cell(
     cell_id: str, username: Optional[str] = None, file_path: Optional[str] = None
 ) -> dict:
     """Selects a cell in the active notebook by navigating to it using cursor movements.
 
     Args:
-        cell_id: The UUID of the cell to select, or a numeric index as string
+        cell_id: The nbformat id of the cell to select
         username: Optional username to get the active cell for that specific user
         file_path: Optional path to the notebook file. If provided, uses this path
                    instead of deriving the notebook from awareness state.
@@ -1332,7 +1266,7 @@ async def select_cell(
         if not file_path:
             raise RuntimeError("No active notebook found. Please open a notebook first.")
 
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1392,7 +1326,7 @@ async def edit_cell(
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to edit, or a numeric index as string.
+            The nbformat id of the cell to edit.
         content:
             The new content for the cell. If None, the existing content is preserved.
         cell_type:
@@ -1431,7 +1365,7 @@ async def edit_cell(
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1707,6 +1641,5 @@ toolkit = [
     get_cell_id_from_index,
     get_active_notebook,
     get_active_cell_id,
-    get_open_documents,
     create_notebook,
 ]

@@ -306,6 +306,7 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
 
         #### Metadata
         ```yaml
+        id: 8f2c1a3b
         type: code
         execution_count: 1
         ```
@@ -369,6 +370,7 @@ def cell_to_md(cell_json: dict, index: int = 0, include_outputs: bool = True) ->
     # Add metadata section
     md_parts.append("#### Metadata")
     metadata = {
+        "id": cell_json.get("id"),
         "type": cell_json.get("cell_type"),
         "execution_count": cell_json.get("execution_count"),
     }
