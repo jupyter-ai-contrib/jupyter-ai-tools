@@ -25,6 +25,48 @@ def get_serverapp():
     return server
 
 
+# --- RTC availability -------------------------------------------------------
+# A minimal version of jupyterlab_chat's rtc_lib: is a real-time collaboration
+# provider actually active this session? "installed" is not "enabled", so we
+# check the extension manager (and honor jupyter_server_ydoc's disable_rtc
+# trait). When no provider is active, the tools fall back to driving the
+# JupyterLab frontend via jupyterlab-ai-commands.
+_RTC_PROVIDERS = ("jupyter_server_documents", "jupyter_server_ydoc")
+
+
+def rtc_available() -> bool:
+    """Return True iff an RTC provider is enabled for the current session."""
+    try:
+        serverapp = get_serverapp()
+        manager = serverapp.extension_manager
+    except Exception:
+        return False
+
+    for name in _RTC_PROVIDERS:
+        ext = manager.extensions.get(name)
+        if not (ext and getattr(ext, "enabled", False)):
+            continue
+        if name == "jupyter_server_ydoc":
+            # jupyter_server_ydoc can be turned off via YDocExtension.disable_rtc.
+            apps = getattr(manager, "extension_apps", {}) or {}
+            instances = apps.get(name)
+            app = next(iter(instances)) if instances else None
+            if app is not None and bool(getattr(app, "disable_rtc", False)):
+                continue
+        return True
+    return False
+
+
+async def run_lab_command(command_id: str, args: Optional[Dict] = None) -> dict:
+    """Execute a JupyterLab frontend command (via jupyterlab-commands-toolkit).
+
+    Used by the RTC-free tool implementations to drive jupyterlab-ai-commands.
+    """
+    from jupyterlab_commands_toolkit.tools import execute_command
+
+    return await execute_command(command_id, args or {})
+
+
 def normalize_filepath(file_path: str) -> str:
     """
     Normalizes a file path for Jupyter applications to return an absolute path.
@@ -264,6 +306,7 @@ def notebook_json_to_md(notebook_json: dict, include_outputs: bool = True) -> st
 
         #### Metadata
         ```yaml
+        id: 8f2c1a3b
         type: code
         execution_count: 1
         ```
@@ -327,6 +370,7 @@ def cell_to_md(cell_json: dict, index: int = 0, include_outputs: bool = True) ->
     # Add metadata section
     md_parts.append("#### Metadata")
     metadata = {
+        "id": cell_json.get("id"),
         "type": cell_json.get("cell_type"),
         "execution_count": cell_json.get("execution_count"),
     }

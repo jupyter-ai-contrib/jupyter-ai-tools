@@ -8,10 +8,15 @@ test.describe('get_active_cell_id', () => {
   test('reports the selected cell', async ({ page, tmpPath, mcp }) => {
     const { path, cellIds } = await buildNotebook(page, tmpPath);
     await page.notebook.selectCells(0);
-    const res = await callTool(mcp, 'get_active_cell_id', {
-      notebook_path: path
-    });
-    expect(res.isError, res.text).toBe(false);
-    expect(res.text).toContain(cellIds[0]);
+    // The selected cell id is published into the notebook room awareness
+    // asynchronously, so poll until it propagates.
+    await expect
+      .poll(
+        async () =>
+          (await callTool(mcp, 'get_active_cell_id', { notebook_path: path }))
+            .text,
+        { timeout: 15000 }
+      )
+      .toContain(cellIds[0]);
   });
 });

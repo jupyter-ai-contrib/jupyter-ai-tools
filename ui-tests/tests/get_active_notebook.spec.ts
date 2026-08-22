@@ -6,8 +6,12 @@ import { buildNotebook } from './fixtures';
 test.describe('get_active_notebook', () => {
   test('reports the open notebook', async ({ page, tmpPath, mcp }) => {
     await buildNotebook(page, tmpPath);
-    const res = await callTool(mcp, 'get_active_notebook', {});
-    expect(res.isError, res.text).toBe(false);
-    expect(res.text).toContain('sample.ipynb');
+    // jupyterlab-notebook-awareness publishes the active notebook into global
+    // awareness asynchronously after open, so poll until it propagates.
+    await expect
+      .poll(async () => (await callTool(mcp, 'get_active_notebook', {})).text, {
+        timeout: 15000
+      })
+      .toContain('sample.ipynb');
   });
 });

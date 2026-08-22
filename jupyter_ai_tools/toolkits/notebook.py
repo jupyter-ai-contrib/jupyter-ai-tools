@@ -3,7 +3,6 @@ import difflib
 import json
 import logging
 import os
-import re
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -19,51 +18,14 @@ from ..utils import (
     get_jupyter_ydoc,
     normalize_filepath,
     notebook_json_to_md,
+    rtc_available,
+    run_lab_command,
 )
 
 if TYPE_CHECKING:
     from mcp.types import ImageContent
 
 logger = logging.getLogger(__name__)
-
-
-def _is_uuid_like(value: str) -> bool:
-    """Check if a string looks like a UUID v4"""
-    if not isinstance(value, str):
-        return False
-    # UUID v4 pattern: 8-4-4-4-12 hexadecimal characters
-    uuid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-
-
-def _is_index_like(value: str) -> bool:
-    """Check if a string looks like a numeric index"""
-    if not isinstance(value, str):
-        return False
-    try:
-        int(value)
-        return True
-    except ValueError:
-        return False
-
-
-async def _resolve_cell_id(file_path: str, cell_id_or_index: str) -> str:
-    """
-    Resolve a cell_id parameter that might be either a UUID or an index.
-    If it's an index, convert it to the actual cell_id.
-    """
-    if _is_uuid_like(cell_id_or_index):
-        return cell_id_or_index
-    elif _is_index_like(cell_id_or_index):
-        index = int(cell_id_or_index)
-        try:
-            actual_cell_id = await get_cell_id_from_index(file_path, index)
-            return actual_cell_id
-        except Exception as e:
-            raise ValueError(f"Invalid cell index {index}: {str(e)}")
-    else:
-        # Assume it's a cell_id and let the downstream function handle validation
-        return cell_id_or_index
 
 
 def clean_text(text: Union[str, list, None]) -> Optional[str]:
@@ -276,7 +238,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
         include_outputs:
             If True, cell outputs will be included in the markdown. Default is True.
 
@@ -289,7 +251,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
         cell_md = cell_to_md(cell, cell_index)
         return cell_md
@@ -307,7 +269,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
 
     Returns:
         A tuple containing:
@@ -320,7 +282,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
         notebook_json = await read_notebook_json(file_path)
         cell_index = _get_cell_index_from_id_json(notebook_json, resolved_cell_id)
 
@@ -379,7 +341,7 @@ async def read_cell_image(
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to read, or a numeric index as string.
+            The nbformat id of the cell.
         output_index:
             If provided, inspect only that single output. If None (default),
             scan all outputs and return the first supported image found.
@@ -491,6 +453,25 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         raise
 
 
+def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
+    """True iff the notebook has exactly one cell and it is empty.
+
+    Mirrors jupyterlab-ai-commands' add-cell behavior, which replaces a lone
+    empty first cell instead of appending a new one, so the RTC and RTC-free
+    paths agree.
+    """
+    try:
+        cells = ydoc.get().get("cells", [])
+        if len(cells) != 1:
+            return False
+        source = cells[0].get("source", "")
+        if isinstance(source, list):
+            source = "".join(source)
+        return not source.strip()
+    except Exception:
+        return False
+
+
 async def add_cell(
     file_path: str,
     content: Optional[str] = None,
@@ -512,7 +493,7 @@ async def add_cell(
         content:
             The content of the new cell. If None, an empty cell is created.
         cell_id:
-            The UUID of the cell to add relative to, or a numeric index as string. If None,
+            The nbformat id of the cell to add relative to. If None,
             the cell is added at the end of the notebook.
         add_above:
             If True, the cell is added above the specified cell. If False,
@@ -523,10 +504,22 @@ async def add_cell(
     Returns:
         None
     """
+    if not rtc_available():
+        # RTC-free: drive the JupyterLab frontend via jupyterlab-ai-commands.
+        return await run_lab_command(
+            "jupyterlab-ai-commands:add-cell",
+            {
+                "notebookPath": file_path,
+                "referenceCellId": cell_id,
+                "content": content or "",
+                "cellType": cell_type,
+                "position": "above" if add_above else "below",
+            },
+        )
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id) if cell_id else None
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc: YNotebook = await get_jupyter_ydoc(file_id)
@@ -546,7 +539,12 @@ async def add_cell(
                 cell["execution_count"] = None
                 cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
-            if insert_index >= cells_count:
+            if _is_single_empty_notebook(ydoc):
+                # Match jupyterlab-ai-commands: replace a single empty first
+                # cell instead of adding a new one.
+                del ydoc.ycells[0]
+                ydoc.ycells.append(ycell)
+            elif insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
@@ -610,6 +608,32 @@ async def insert_cell(
     Returns:
         None
     """
+    if not rtc_available():
+        # RTC-free: jupyterlab-ai-commands add-cell is reference-cell based, so
+        # translate the target index into a (reference cell, position).
+        info = await run_lab_command(
+            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": file_path}
+        )
+        cells = (((info or {}).get("result") or {}).get("cells")) or []
+        idx = insert_index if insert_index is not None else len(cells)
+        if not cells:
+            ref, position = None, "below"
+        elif idx <= 0:
+            ref, position = cells[0]["cellId"], "above"
+        elif idx >= len(cells):
+            ref, position = cells[-1]["cellId"], "below"
+        else:
+            ref, position = cells[idx]["cellId"], "above"
+        return await run_lab_command(
+            "jupyterlab-ai-commands:add-cell",
+            {
+                "notebookPath": file_path,
+                "referenceCellId": ref,
+                "content": content or "",
+                "cellType": cell_type,
+                "position": position,
+            },
+        )
     try:
         file_path = normalize_filepath(file_path)
         file_id = await get_file_id(file_path)
@@ -626,7 +650,10 @@ async def insert_cell(
                 cell["execution_count"] = None
                 cell["outputs"] = []
             ycell = ydoc.create_ycell(cell)
-            if insert_index >= cells_count:
+            if _is_single_empty_notebook(ydoc):
+                del ydoc.ycells[0]
+                ydoc.ycells.append(ycell)
+            elif insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
@@ -666,15 +693,20 @@ async def delete_cell(file_path: str, cell_id: str):
 
     Args:
         file_path: The relative path to the notebook file on the filesystem.
-        cell_id: The UUID of the cell to delete, or a numeric index as string.
+        cell_id: The nbformat id of the cell to delete.
 
     Returns:
         None
     """
+    if not rtc_available():
+        return await run_lab_command(
+            "jupyterlab-ai-commands:delete-cell",
+            {"notebookPath": file_path, "cellId": cell_id},
+        )
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1118,6 +1150,9 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
         File path for the first active notebook. If username is provided, then
         returns the active notebook for that specific user.
     """
+    if not rtc_available():
+        resp = await run_lab_command("jupyterlab-ai-commands:get-notebook-info", {})
+        return ((resp or {}).get("result") or {}).get("notebookPath")
     awareness = await get_global_awareness()
     if not awareness:
         return None
@@ -1166,37 +1201,16 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
     Returns:
         The active cell ID for the notebook, or None if no active cell found
     """
+    if not rtc_available():
+        resp = await run_lab_command(
+            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": notebook_path}
+        )
+        return ((resp or {}).get("result") or {}).get("activeCellId")
     file_path = normalize_filepath(notebook_path)
     file_id = await get_file_id(file_path)
     ydoc = await get_jupyter_ydoc(file_id)
 
     return _get_active_cell_id_from_ydoc(ydoc, username)
-
-
-async def get_open_documents(username: Optional[str] = None) -> Optional[List[str]]:
-    """Returns all open documents for the user, excluding chat files.
-
-    Args:
-        username: Optional username to return a specific user's open documents
-
-    Returns:
-        List of file paths for all open documents (excluding .chat files).
-        Returns None if no documents are found or awareness is unavailable.
-    """
-    awareness = await get_global_awareness()
-    if not awareness:
-        return None
-
-    for _, state in awareness.states.items():
-        _username = state.get("user", {}).get("username", None)
-        if username and username != _username:
-            continue
-
-        if documents := state.get("documents"):
-            filtered_documents = [doc for doc in documents if not doc.endswith('.chat')]
-            return filtered_documents if filtered_documents else None
-
-    return None
 
 
 async def select_cell(
@@ -1205,7 +1219,7 @@ async def select_cell(
     """Selects a cell in the active notebook by navigating to it using cursor movements.
 
     Args:
-        cell_id: The UUID of the cell to select, or a numeric index as string
+        cell_id: The nbformat id of the cell to select
         username: Optional username to get the active cell for that specific user
         file_path: Optional path to the notebook file. If provided, uses this path
                    instead of deriving the notebook from awareness state.
@@ -1219,13 +1233,40 @@ async def select_cell(
     """
     from jupyterlab_commands_toolkit.tools import execute_command
 
+    if not rtc_available():
+        # RTC-free: read the current + target cell from the frontend
+        # (get-notebook-info), then navigate with the same core move-cursor
+        # commands the RTC path uses.
+        target_path = file_path or await get_active_notebook(username)
+        if not target_path:
+            raise RuntimeError("No active notebook found. Please open a notebook first.")
+        info = await run_lab_command(
+            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": target_path}
+        )
+        info_result = (info or {}).get("result") or {}
+        cells = info_result.get("cells") or []
+        ids = [c.get("cellId") for c in cells]
+        if cell_id not in ids:
+            raise ValueError(f"Cell with ID {cell_id} not found in notebook")
+        target_index = ids.index(cell_id)
+        active_id = info_result.get("activeCellId")
+        active_index = ids.index(active_id) if active_id in ids else 0
+        distance = target_index - active_index
+        if distance == 0:
+            return {"success": True, "result": "Already at target cell"}
+        cmd = "notebook:move-cursor-down" if distance > 0 else "notebook:move-cursor-up"
+        move_result: dict = {}
+        for _ in range(abs(distance)):
+            move_result = await execute_command(cmd)
+        return move_result
+
     try:
         if not file_path:
             file_path = await get_active_notebook(username)
         if not file_path:
             raise RuntimeError("No active notebook found. Please open a notebook first.")
 
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1285,7 +1326,7 @@ async def edit_cell(
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_id:
-            The UUID of the cell to edit, or a numeric index as string.
+            The nbformat id of the cell to edit.
         content:
             The new content for the cell. If None, the existing content is preserved.
         cell_type:
@@ -1299,10 +1340,32 @@ async def edit_cell(
     Raises:
         ValueError: If the cell_id is not found in the notebook.
     """
+    if not rtc_available():
+        rtc_free_result: dict = {"success": True}
+        if content is not None:
+            rtc_free_result = await run_lab_command(
+                "jupyterlab-ai-commands:set-cell-content",
+                {
+                    "notebookPath": file_path,
+                    "cellId": cell_id,
+                    "content": content,
+                    "showDiff": False,
+                },
+            )
+        if cell_type is not None:
+            # change-cell-to-* act on the selected cell, so select it first.
+            await select_cell(cell_id, file_path=file_path)
+            type_command = {
+                "code": "notebook:change-cell-to-code",
+                "markdown": "notebook:change-cell-to-markdown",
+                "raw": "notebook:change-cell-to-raw",
+            }[cell_type]
+            rtc_free_result = await run_lab_command(type_command)
+        return rtc_free_result
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
-        resolved_cell_id = await _resolve_cell_id(file_path, cell_id)
+        resolved_cell_id = cell_id
 
         file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
@@ -1578,6 +1641,5 @@ toolkit = [
     get_cell_id_from_index,
     get_active_notebook,
     get_active_cell_id,
-    get_open_documents,
     create_notebook,
 ]
