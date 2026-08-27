@@ -155,10 +155,7 @@ async def read_notebook_cells(
         FileNotFoundError: If notebook file doesn't exist
         ValueError: If specific cell ID is not found
     """
-    resolved_path = normalize_filepath(notebook_path)
-
-    with open(resolved_path, "r", encoding="utf-8") as file:
-        notebook_data = json.load(file)
+    notebook_data = await read_notebook_json(notebook_path)
 
     language = notebook_data.get("metadata", {}).get("language_info", {}).get("name", "python")
 
@@ -197,7 +194,6 @@ async def read_notebook(file_path: str, include_outputs=False) -> str:
         The notebook content as a markdown string.
     """
     try:
-        file_path = normalize_filepath(file_path)
         notebook_dict = await read_notebook_json(file_path)
         notebook_md = notebook_json_to_md(notebook_dict, include_outputs=include_outputs)
         return notebook_md
@@ -208,23 +204,44 @@ async def read_notebook(file_path: str, include_outputs=False) -> str:
 async def read_notebook_json(file_path: str) -> Dict[str, Any]:
     """Returns the complete notebook content as a JSON dictionary.
 
-    This function reads a Jupyter notebook file and returns its content as a
-    dictionary representation of the JSON structure.
+    This is the single choke point every read tool goes through to obtain the
+    notebook as an nbformat dict.
+
+    When no RTC provider is active (the RTC-free case), the write tools mutate
+    the live in-browser notebook model via jupyterlab-ai-commands *without*
+    saving to disk -- saving is left to the human. Reading from disk would
+    therefore return stale content (see issue #39). To stay consistent with the
+    write tools, we read the live model through the
+    ``jupyterlab-ai-commands:get-notebook-content`` frontend command, which
+    returns the current (possibly unsaved) nbformat JSON.
+
+    When an RTC provider is active, the server owns a live YDoc that is synced
+    to the filesystem, so the on-disk content is already current and we read it
+    directly.
 
     Args:
         file_path:
-            The relative path to the notebook file on the filesystem.
+            The relative path to the notebook file. Passed to the frontend
+            command as-is (mirroring the write tools); normalized to an absolute
+            filesystem path only for the on-disk read.
 
     Returns:
         A dictionary containing the complete notebook structure.
     """
-    try:
-        file_path = normalize_filepath(file_path)
-        with open(file_path, "r", encoding="utf-8") as f:
-            notebook_dict = json.load(f)
-            return notebook_dict
-    except Exception:
-        raise
+    if not rtc_available():
+        # RTC-free: read the live model (mirrors how the write tools operate).
+        res = await run_lab_command(
+            "jupyterlab-ai-commands:get-notebook-content",
+            {"notebookPath": file_path},
+        )
+        # execute_command wraps the command's return value under "result".
+        payload = res.get("result", res) if isinstance(res, dict) else res
+        return payload["content"]
+
+    normalized_path = normalize_filepath(file_path)
+    with open(normalized_path, "r", encoding="utf-8") as f:
+        notebook_dict = json.load(f)
+        return notebook_dict
 
 
 async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) -> str:
@@ -249,7 +266,6 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         LookupError: If no cell with the given ID is found.
     """
     try:
-        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
@@ -280,7 +296,6 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         LookupError: If no cell with the given ID is found.
     """
     try:
-        file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
         notebook_json = await read_notebook_json(file_path)
@@ -434,7 +449,6 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         or if the cell does not have an ID.
     """
     try:
-        file_path = normalize_filepath(file_path)
         cell_id = None
         notebook_json = await read_notebook_json(file_path)
         cells = notebook_json["cells"]
