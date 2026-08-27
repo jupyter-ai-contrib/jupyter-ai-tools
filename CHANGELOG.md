@@ -2,6 +2,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.7.0rc0
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.7.0a0...d7a41a95b6b9a9982afee55ac1e3d451400597b7))
+
+### Merged PRs
+
+- Read the live notebook model when RTC-free [#41](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/41) ([@dlqqq](https://github.com/dlqqq))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-08-22&to=2026-08-27&type=c))
+
+@dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-08-22..2026-08-27&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.7.0a0
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.6.1...eb07b8dbdee5f118796fc1772288b71746972342))
@@ -23,8 +42,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-07-16&to=2026-08-22&type=c))
 
 @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-07-16..2026-08-22&type=Issues)) | @Zsailer ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3AZsailer+updated%3A2026-07-16..2026-08-22&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.6.1
 

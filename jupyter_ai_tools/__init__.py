@@ -1,6 +1,6 @@
 from .toolkits.notebook import toolkit as nb_toolkit
 
-__version__ = "0.7.0a0"
+__version__ = "0.7.0rc0"
 
 __all__ = [
     "nb_toolkit",
