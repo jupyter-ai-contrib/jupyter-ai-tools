@@ -30,10 +30,7 @@ dependencies = [
   "pycrdt",
   "jupyter_ydoc",
   "jupyterlab-commands-toolkit",
-  # Provides the frontend commands the tools drive when no RTC provider is
-  # active (the RTC-free fallback). 0.4.0rc0 adds the get-notebook-content
-  # command used by the read tools.
-  "jupyterlab-ai-commands>=0.4.0rc0",
+  "jupyterlab-ai-commands>=0.4.0",
 ]
 
 
