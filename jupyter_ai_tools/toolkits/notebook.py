@@ -1155,14 +1155,16 @@ def _safe_set_cursor(
 
 
 async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
-    """Returns path for the currently active notebook.
+    """Returns the path of the notebook the user is working in.
 
     Args:
         username: Optional username to return a specific user's active notebook
 
     Returns:
-        File path for the first active notebook. If username is provided, then
-        returns the active notebook for that specific user.
+        File path of the most recently focused notebook that is still open, even
+        while a chat or another panel has focus, or None if it cannot be
+        determined. If username is provided, then returns the active notebook for
+        that specific user; otherwise the first one found.
     """
     if not rtc_available():
         resp = await run_lab_command("jupyterlab-ai-commands:get-notebook-info", {})
@@ -1170,11 +1172,25 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
     awareness = await get_global_awareness()
     if not awareness:
         return None
-    for _, state in awareness.states.items():
-        _username = state.get("user", {}).get("username", None)
-        if username and username != _username:
-            continue
+    states = [
+        state
+        for state in awareness.states.values()
+        if not username or username == state.get("user", {}).get("username", None)
+    ]
 
+    # When a client publishes `notebookPath` to global awareness (the field
+    # jupyterlab-notebook-awareness uses), it names the notebook the user most
+    # recently worked in and survives focus moving to a chat. Without it, a
+    # focused chat with two or more notebooks open leaves this returning None.
+    # Consult it across all states before the `current`/`documents` fallbacks,
+    # which a state carrying only those (the server's own, or another tab of the
+    # same user) could otherwise answer first.
+    for state in states:
+        notebook_path = state.get("notebookPath")
+        if isinstance(notebook_path, str) and notebook_path.endswith(".ipynb"):
+            return notebook_path
+
+    for state in states:
         if (active_notebook := state.get("current")) and "notebook" in active_notebook:
             return active_notebook.replace("notebook:", "")
 
