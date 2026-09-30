@@ -2,7 +2,7 @@ import functools
 import inspect
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import unquote
 
 from jupyter_server.auth.identity import User
@@ -65,6 +65,22 @@ async def run_lab_command(command_id: str, args: Optional[Dict] = None) -> dict:
     from jupyterlab_commands_toolkit.tools import execute_command
 
     return await execute_command(command_id, args or {})
+
+
+def no_web_client(result: Any) -> bool:
+    """Whether a frontend command failed because no JupyterLab web client received it.
+
+    jupyterlab-commands-toolkit reports this with an error code. An older
+    version only times out, and the result then has no error code.
+    """
+    return isinstance(result, dict) and result.get("error_code") == "no_web_client"
+
+
+def command_result(result: dict) -> Any:
+    """Return the value of a successful frontend command, or raise its error."""
+    if not result.get("success"):
+        raise RuntimeError(result.get("error") or "The JupyterLab command failed")
+    return result.get("result")
 
 
 def normalize_filepath(file_path: str) -> str:

@@ -77,6 +77,23 @@ To install the extension, execute:
 pip install jupyter_ai_tools
 ```
 
+## Without a JupyterLab web client
+
+Without a real-time collaboration provider, the notebook tools run in the JupyterLab
+frontend through [jupyterlab-ai-commands](https://github.com/jupyter-ai-contrib/jupyterlab-ai-commands).
+When no JupyterLab tab is open, nothing holds a live model of the notebook, so the
+read and write tools (`read_notebook`, `add_cell`, `insert_cell`, `delete_cell`,
+`edit_cell`, ...) read and edit the notebook file on disk instead. The result of a
+write tool then says that the edit went to the file on disk.
+
+The tools that need the user interface (`select_cell`, `get_active_notebook`,
+`get_active_cell_id`, `run_cell`, `run_all_cells`, `open_file`) return the error of
+`jupyterlab-commands-toolkit`, which asks to open JupyterLab in a web browser.
+
+This needs a version of `jupyterlab-commands-toolkit` that reports a missing web
+client with `error_code: "no_web_client"`. With an older version, the tools return
+its timeout error.
+
 ## Uninstall
 
 To remove the extension, execute:

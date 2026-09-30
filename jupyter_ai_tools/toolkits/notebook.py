@@ -13,9 +13,11 @@ from pycrdt import Assoc, Text
 
 from ..utils import (
     cell_to_md,
+    command_result,
     get_file_id,
     get_global_awareness,
     get_jupyter_ydoc,
+    no_web_client,
     normalize_filepath,
     notebook_json_to_md,
     rtc_available,
@@ -217,7 +219,8 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
 
     When an RTC provider is active, the server owns a live YDoc that is synced
     to the filesystem, so the on-disk content is already current and we read it
-    directly.
+    directly. The same applies when no web client is connected: nothing holds a
+    live model, so the file on disk is read.
 
     Args:
         file_path:
@@ -234,9 +237,8 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
             "jupyterlab-ai-commands:get-notebook-content",
             {"notebookPath": file_path},
         )
-        # execute_command wraps the command's return value under "result".
-        payload = res.get("result", res) if isinstance(res, dict) else res
-        return payload["content"]
+        if not no_web_client(res):
+            return command_result(res)["content"]
 
     normalized_path = normalize_filepath(file_path)
     with open(normalized_path, "r", encoding="utf-8") as f:
@@ -467,6 +469,102 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         raise
 
 
+_NEW_CELL = {
+    "code": nbformat.v4.new_code_cell,
+    "markdown": nbformat.v4.new_markdown_cell,
+    "raw": nbformat.v4.new_raw_cell,
+}
+
+
+def _read_notebook_file(file_path: str):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return nbformat.read(f, as_version=nbformat.NO_CONVERT)
+
+
+def _write_notebook_file(file_path: str, notebook) -> None:
+    with open(file_path, "w", encoding="utf-8") as f:
+        nbformat.write(notebook, f)
+
+
+def _file_result(message: str, **fields) -> dict:
+    """Build the result of a write tool that edited the notebook file on disk.
+
+    The message tells the agent that the edit went to the file, not to a
+    notebook open in JupyterLab.
+    """
+    return {"success": True, "result": {"message": message, **fields}}
+
+
+def _add_cell_to_file(
+    file_path: str,
+    content: Optional[str],
+    cell_id: Optional[str],
+    add_above: bool,
+    cell_type: str,
+) -> str:
+    """Add a cell to the notebook file on disk and return the id of the new cell."""
+    notebook = _read_notebook_file(file_path)
+    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id) if cell_id else None
+    insert_index = _determine_insert_index(len(notebook.cells), cell_index, add_above)
+    return _insert_cell_in_file(file_path, content, insert_index, cell_type, notebook)
+
+
+def _insert_cell_in_file(
+    file_path: str,
+    content: Optional[str],
+    insert_index: Optional[int],
+    cell_type: str,
+    notebook=None,
+) -> str:
+    """Insert a cell in the notebook file on disk and return the id of the new cell."""
+    if notebook is None:
+        notebook = _read_notebook_file(file_path)
+    if insert_index is None:
+        insert_index = len(notebook.cells)
+    cell = _NEW_CELL[cell_type](source=content or "")
+    notebook.cells.insert(insert_index, cell)
+    _write_notebook_file(file_path, notebook)
+    return cell.id
+
+
+def _delete_cell_from_file(file_path: str, cell_id: str) -> Optional[int]:
+    """Delete a cell from the notebook file on disk and return its former index."""
+    notebook = _read_notebook_file(file_path)
+    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
+    if cell_index is not None:
+        notebook.cells.pop(cell_index)
+        _write_notebook_file(file_path, notebook)
+    return cell_index
+
+
+def _edit_cell_in_file(
+    file_path: str,
+    cell_id: str,
+    content: Optional[str],
+    cell_type: Optional[str],
+) -> None:
+    """Edit the content and/or type of a cell in the notebook file on disk."""
+    notebook = _read_notebook_file(file_path)
+    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
+    if cell_index is None:
+        raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
+
+    old_cell = notebook.cells[cell_index]
+    source = content if content is not None else old_cell.source
+
+    if cell_type is not None and cell_type != old_cell.cell_type:
+        new_cell = _NEW_CELL[cell_type](source=source)
+        if getattr(old_cell, "id", None):
+            new_cell.id = old_cell.id
+        new_cell.metadata.update(old_cell.get("metadata", {}))
+        notebook.cells[cell_index] = new_cell
+    elif content is not None:
+        old_cell.source = content
+    else:
+        return
+    _write_notebook_file(file_path, notebook)
+
+
 def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
     """True iff the notebook has exactly one cell and it is empty.
 
@@ -520,7 +618,7 @@ async def add_cell(
     """
     if not rtc_available():
         # RTC-free: drive the JupyterLab frontend via jupyterlab-ai-commands.
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:add-cell",
             {
                 "notebookPath": file_path,
@@ -529,6 +627,16 @@ async def add_cell(
                 "cellType": cell_type,
                 "position": "above" if add_above else "below",
             },
+        )
+        if not no_web_client(result):
+            return result
+        new_cell_id = _add_cell_to_file(
+            normalize_filepath(file_path), content, cell_id, add_above, cell_type
+        )
+        return _file_result(
+            f"{cell_type} cell added to the notebook file on disk, "
+            "as the notebook is not open in JupyterLab",
+            cellId=new_cell_id,
         )
     try:
         file_path = normalize_filepath(file_path)
@@ -567,28 +675,7 @@ async def add_cell(
             else:
                 _atomic_replace_cell_source(ycell, content or "")
         else:
-            with open(file_path, "r", encoding="utf-8") as f:
-                notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
-
-            cells_count = len(notebook.cells)
-            cell_index = (
-                _get_cell_index_from_id_nbformat(notebook, resolved_cell_id)
-                if resolved_cell_id
-                else None
-            )
-            insert_index = _determine_insert_index(cells_count, cell_index, add_above)
-
-            if cell_type == "code":
-                notebook.cells.insert(insert_index, nbformat.v4.new_code_cell(source=content or ""))
-            elif cell_type == "markdown":
-                notebook.cells.insert(
-                    insert_index, nbformat.v4.new_markdown_cell(source=content or "")
-                )
-            else:
-                notebook.cells.insert(insert_index, nbformat.v4.new_raw_cell(source=content or ""))
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                nbformat.write(notebook, f)
+            _add_cell_to_file(file_path, content, resolved_cell_id, add_above, cell_type)
 
         return None
     except Exception:
@@ -628,7 +715,18 @@ async def insert_cell(
         info = await run_lab_command(
             "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": file_path}
         )
-        cells = (((info or {}).get("result") or {}).get("cells")) or []
+        if no_web_client(info):
+            new_cell_id = _insert_cell_in_file(
+                normalize_filepath(file_path), content, insert_index, cell_type
+            )
+            return _file_result(
+                f"{cell_type} cell inserted in the notebook file on disk, "
+                "as the notebook is not open in JupyterLab",
+                cellId=new_cell_id,
+            )
+        if not info.get("success"):
+            return info
+        cells = (info.get("result") or {}).get("cells") or []
         idx = insert_index if insert_index is not None else len(cells)
         if not cells:
             ref, position = None, "below"
@@ -667,7 +765,7 @@ async def insert_cell(
             if _is_single_empty_notebook(ydoc):
                 del ydoc.ycells[0]
                 ydoc.ycells.append(ycell)
-            elif insert_index >= cells_count:
+            elif insert_index is None or insert_index >= cells_count:
                 ydoc.ycells.append(ycell)
             else:
                 ydoc.ycells.insert(insert_index, ycell)
@@ -676,22 +774,7 @@ async def insert_cell(
             else:
                 _atomic_replace_cell_source(ycell, content or "")
         else:
-            with open(file_path, "r", encoding="utf-8") as f:
-                notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
-
-            cells_count = len(notebook.cells)
-
-            if cell_type == "code":
-                notebook.cells.insert(insert_index, nbformat.v4.new_code_cell(source=content or ""))
-            elif cell_type == "markdown":
-                notebook.cells.insert(
-                    insert_index, nbformat.v4.new_markdown_cell(source=content or "")
-                )
-            else:
-                notebook.cells.insert(insert_index, nbformat.v4.new_raw_cell(source=content or ""))
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                nbformat.write(notebook, f)
+            _insert_cell_in_file(file_path, content, insert_index, cell_type)
 
     except Exception:
         raise
@@ -713,9 +796,18 @@ async def delete_cell(file_path: str, cell_id: str):
         None
     """
     if not rtc_available():
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:delete-cell",
             {"notebookPath": file_path, "cellId": cell_id},
+        )
+        if not no_web_client(result):
+            return result
+        if _delete_cell_from_file(normalize_filepath(file_path), cell_id) is None:
+            raise ValueError(f"Could not find cell index for {cell_id=}")
+        return _file_result(
+            "Cell deleted from the notebook file on disk, "
+            "as the notebook is not open in JupyterLab",
+            cellId=cell_id,
         )
     try:
         file_path = normalize_filepath(file_path)
@@ -732,16 +824,7 @@ async def delete_cell(file_path: str, cell_id: str):
             else:
                 pass  # Cell not found in ydoc
         else:
-            with open(file_path, "r", encoding="utf-8") as f:
-                notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
-
-            cell_index = _get_cell_index_from_id_nbformat(notebook, resolved_cell_id)
-            if cell_index is not None and 0 <= cell_index < len(notebook.cells):
-                notebook.cells.pop(cell_index)
-                with open(file_path, "w", encoding="utf-8") as f:
-                    nbformat.write(notebook, f)
-            else:
-                pass  # Cell not found in notebook
+            cell_index = _delete_cell_from_file(file_path, resolved_cell_id)
 
         if cell_index is None:
             raise ValueError(f"Could not find cell index for {cell_id=}")
@@ -1166,7 +1249,9 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
     """
     if not rtc_available():
         resp = await run_lab_command("jupyterlab-ai-commands:get-notebook-info", {})
-        return ((resp or {}).get("result") or {}).get("notebookPath")
+        if no_web_client(resp):
+            raise RuntimeError(resp["error"])
+        return (resp.get("result") or {}).get("notebookPath")
     awareness = await get_global_awareness()
     if not awareness:
         return None
@@ -1219,7 +1304,9 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
         resp = await run_lab_command(
             "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": notebook_path}
         )
-        return ((resp or {}).get("result") or {}).get("activeCellId")
+        if no_web_client(resp):
+            raise RuntimeError(resp["error"])
+        return (resp.get("result") or {}).get("activeCellId")
     file_path = normalize_filepath(notebook_path)
     file_id = await get_file_id(file_path)
     ydoc = await get_jupyter_ydoc(file_id)
@@ -1257,7 +1344,9 @@ async def select_cell(
         info = await run_lab_command(
             "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": target_path}
         )
-        info_result = (info or {}).get("result") or {}
+        if not info.get("success"):
+            return info
+        info_result = info.get("result") or {}
         cells = info_result.get("cells") or []
         ids = [c.get("cellId") for c in cells]
         if cell_id not in ids:
@@ -1366,15 +1455,23 @@ async def edit_cell(
                     "showDiff": False,
                 },
             )
-        if cell_type is not None:
+        if cell_type is not None and rtc_free_result.get("success"):
             # change-cell-to-* act on the selected cell, so select it first.
-            await select_cell(cell_id, file_path=file_path)
-            type_command = {
-                "code": "notebook:change-cell-to-code",
-                "markdown": "notebook:change-cell-to-markdown",
-                "raw": "notebook:change-cell-to-raw",
-            }[cell_type]
-            rtc_free_result = await run_lab_command(type_command)
+            rtc_free_result = await select_cell(cell_id, file_path=file_path)
+            if rtc_free_result.get("success"):
+                type_command = {
+                    "code": "notebook:change-cell-to-code",
+                    "markdown": "notebook:change-cell-to-markdown",
+                    "raw": "notebook:change-cell-to-raw",
+                }[cell_type]
+                rtc_free_result = await run_lab_command(type_command)
+        if no_web_client(rtc_free_result):
+            _edit_cell_in_file(normalize_filepath(file_path), cell_id, content, cell_type)
+            return _file_result(
+                "Cell edited in the notebook file on disk, "
+                "as the notebook is not open in JupyterLab",
+                cellId=cell_id,
+            )
         return rtc_free_result
     try:
         file_path = normalize_filepath(file_path)
@@ -1418,40 +1515,7 @@ async def edit_cell(
                     else:
                         _atomic_replace_cell_source(ycell, content)
         else:
-            with open(file_path, "r", encoding="utf-8") as f:
-                notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
-
-            cell_index = _get_cell_index_from_id_nbformat(notebook, resolved_cell_id)
-            if cell_index is None:
-                raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
-
-            old_cell = notebook.cells[cell_index]
-            old_type = old_cell.cell_type
-            needs_type_change = cell_type is not None and cell_type != old_type
-            source = content if content is not None else old_cell.source
-
-            changed = False
-            if needs_type_change:
-                cell_id_val = getattr(old_cell, "id", None)
-                metadata = old_cell.get("metadata", {})
-                if cell_type == "code":
-                    new_cell = nbformat.v4.new_code_cell(source=source)
-                elif cell_type == "markdown":
-                    new_cell = nbformat.v4.new_markdown_cell(source=source)
-                else:
-                    new_cell = nbformat.v4.new_raw_cell(source=source)
-                if cell_id_val:
-                    new_cell.id = cell_id_val
-                new_cell.metadata.update(metadata)
-                notebook.cells[cell_index] = new_cell
-                changed = True
-            elif content is not None:
-                old_cell.source = content
-                changed = True
-
-            if changed:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    nbformat.write(notebook, f)
+            _edit_cell_in_file(file_path, resolved_cell_id, content, cell_type)
 
         return {"success": True}
     except Exception:
@@ -1633,10 +1697,14 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
 
         notebook["metadata"] = {"kernelspec": spec}
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            nbformat.write(notebook, f)
+        _write_notebook_file(file_path, notebook)
 
-        await open_file(file_path)
+        opened = await open_file(file_path)
+        if not opened.get("success"):
+            return (
+                f"Successfully created notebook: {file_path}. "
+                f"It is not open in JupyterLab: {opened.get('error')}"
+            )
         return f"Successfully created and opened notebook: {file_path}"
 
     except Exception as e:
