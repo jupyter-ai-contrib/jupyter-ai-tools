@@ -31,4 +31,22 @@ test.describe('add_cell', () => {
     expect(res.isError, res.text).toBe(false);
     await expect.poll(async () => page.notebook.getCellCount()).toBe(4);
   });
+
+  test('saves the new cell to disk', async ({ page, tmpPath, mcp }) => {
+    const { path } = await buildNotebook(page, tmpPath);
+    const res = await callTool(mcp, 'add_cell', {
+      file_path: path,
+      content: 'saved = True'
+    });
+    expect(res.isError, res.text).toBe(false);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(
+          `/api/contents/${path}?content=1`
+        );
+        const model = await response.json();
+        return model.content.cells.map((cell: any) => cell.source);
+      })
+      .toContain('saved = True');
+  });
 });
