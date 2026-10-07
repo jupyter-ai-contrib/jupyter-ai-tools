@@ -699,7 +699,6 @@ async def _execute_cells(
     """
     Execute cells with an nbclient client, and stop at the first cell with an error.
     """
-    await client.kc.wait_for_ready(timeout=None)
     results: List[Dict[str, Any]] = []
     budget = _MAX_OUTPUT_TEXT
     for cell_index in cell_indices:
@@ -758,6 +757,7 @@ async def _run_cells(
         try:
             # Without stdin, input() fails at once, as no one can reply to it.
             kc.start_channels(stdin=False, hb=False, control=False)
+            await kc.wait_for_ready(timeout=None)
             cells = await _until_kernel_restart(
                 km,
                 _execute_cells(client, cell_indices, normalize_filepath(file_path), write_outputs),
