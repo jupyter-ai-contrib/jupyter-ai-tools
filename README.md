@@ -86,9 +86,23 @@ read and write tools (`read_notebook`, `add_cell`, `insert_cell`, `delete_cell`,
 `edit_cell`, ...) read and edit the notebook file on disk instead. The result of a
 write tool then says that the edit went to the file on disk.
 
+`run_cell` and `run_all_cells` with a `file_path` run the cells in a kernel on the
+server, and write the outputs to the notebook file on disk. They use the kernel of the
+notebook session, and start a session if there is none. JupyterLab connects to the same
+kernel when it opens the notebook.
+
+With `write_outputs=False`, `run_cell` and `run_all_cells` run the cells in the kernel of
+the notebook and return the outputs, without a change to the notebook. This works with
+or without a web client, and with or without RTC. The kernel state changes, but
+JupyterLab does not show the run.
+
+A kernel that these tools start keeps running after the run, as a kernel that
+JupyterLab starts does.
+
 The tools that need the user interface (`select_cell`, `get_active_notebook`,
-`get_active_cell_id`, `run_cell`, `run_all_cells`, `open_file`) return the error of
-`jupyterlab-commands-toolkit`, which asks to open JupyterLab in a web browser.
+`get_active_cell_id`, `open_file`, and `run_cell` or `run_all_cells` without a
+`file_path`) return the error of `jupyterlab-commands-toolkit`, which asks to open
+JupyterLab in a web browser.
 
 This needs a version of `jupyterlab-commands-toolkit` that reports a missing web
 client with `error_code: "no_web_client"`. With an older version, the tools return
