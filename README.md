@@ -18,7 +18,7 @@ This extension provides runtime-discoverable tools compatible with OpenAI-style 
 - `insert_cell`: Insert a cell at a specific index in the notebook
 - `delete_cell`: Remove a cell from the notebook
 - `edit_cell`: Modify a cell's content
-- `get_cell_id_from_index`: Get cell ID from its index position
+- `get_cell_id_from_index`: Get a cell ID from its one-based number shown in JupyterLab
 - `create_notebook`: Create a new Jupyter notebook
 
 ### 🌀 Git Tools (`git_toolkit`)
