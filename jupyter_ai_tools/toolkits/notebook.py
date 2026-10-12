@@ -1682,30 +1682,33 @@ async def edit_cell(
     if not rtc_available():
         rtc_free_result: dict = {"success": True}
         edited = False
-        if content is not None:
-            rtc_free_result = await run_lab_command(
-                "jupyterlab-ai-commands:set-cell-content",
-                {
-                    "notebookPath": file_path,
-                    "cellId": cell_id,
-                    "content": content,
-                    "showDiff": False,
-                },
-            )
-            edited = bool(rtc_free_result.get("success"))
-        if cell_type is not None and rtc_free_result.get("success"):
-            # change-cell-to-* act on the selected cell, so select it first.
-            rtc_free_result = await select_cell(cell_id, file_path=file_path)
-            if rtc_free_result.get("success"):
-                type_command = {
-                    "code": "notebook:change-cell-to-code",
-                    "markdown": "notebook:change-cell-to-markdown",
-                    "raw": "notebook:change-cell-to-raw",
-                }[cell_type]
-                rtc_free_result = await run_lab_command(type_command)
-                edited = edited or bool(rtc_free_result.get("success"))
-        if edited:
-            rtc_free_result = await _save_notebook_in_frontend(file_path, rtc_free_result)
+        try:
+            if content is not None:
+                rtc_free_result = await run_lab_command(
+                    "jupyterlab-ai-commands:set-cell-content",
+                    {
+                        "notebookPath": file_path,
+                        "cellId": cell_id,
+                        "content": content,
+                        "showDiff": False,
+                    },
+                )
+                edited = bool(rtc_free_result.get("success"))
+            if cell_type is not None and rtc_free_result.get("success"):
+                # change-cell-to-* act on the selected cell, so select it first.
+                rtc_free_result = await select_cell(cell_id, file_path=file_path)
+                if rtc_free_result.get("success"):
+                    type_command = {
+                        "code": "notebook:change-cell-to-code",
+                        "markdown": "notebook:change-cell-to-markdown",
+                        "raw": "notebook:change-cell-to-raw",
+                    }[cell_type]
+                    rtc_free_result = await run_lab_command(type_command)
+                    edited = edited or bool(rtc_free_result.get("success"))
+        finally:
+            # Save even if the type change raised, so a content edit is not lost.
+            if edited:
+                rtc_free_result = await _save_notebook_in_frontend(file_path, rtc_free_result)
         if no_web_client(rtc_free_result):
             _edit_cell_in_file(normalize_filepath(file_path), cell_id, content, cell_type)
             return _file_result(

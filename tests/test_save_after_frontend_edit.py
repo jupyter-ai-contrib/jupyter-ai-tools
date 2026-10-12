@@ -100,6 +100,20 @@ async def test_saves_after_content_edit_when_type_change_fails():
     assert len(saves(mock)) == 1
 
 
+async def test_saves_after_content_edit_when_select_cell_raises():
+    with (
+        patch(
+            "jupyter_ai_tools.toolkits.notebook.select_cell",
+            new_callable=AsyncMock,
+            side_effect=ValueError("Cell with ID cell-1 not found in notebook"),
+        ),
+        frontend() as mock,
+        pytest.raises(ValueError),
+    ):
+        await edit_cell("nb.ipynb", "cell-1", content="x = 2", cell_type="markdown")
+    assert len(saves(mock)) == 1
+
+
 async def test_no_save_without_edit():
     with frontend() as mock:
         result = await edit_cell("nb.ipynb", "cell-1")
