@@ -104,10 +104,6 @@ The tools that need the user interface (`select_cell`, `get_active_notebook`,
 `file_path`) return the error of `jupyterlab-commands-toolkit`, which asks to open
 JupyterLab in a web browser.
 
-This needs a version of `jupyterlab-commands-toolkit` that reports a missing web
-client with `error_code: "no_web_client"`. With an older version, the tools return
-its timeout error.
-
 ## Uninstall
 
 To remove the extension, execute:

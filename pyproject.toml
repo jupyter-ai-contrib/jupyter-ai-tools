@@ -30,7 +30,7 @@ dependencies = [
   "pycrdt",
   "jupyter_ydoc",
   "nbclient",
-  "jupyterlab-commands-toolkit",
+  "jupyterlab-commands-toolkit>=0.3.1",
   "jupyterlab-ai-commands>=0.4.0",
 ]
 

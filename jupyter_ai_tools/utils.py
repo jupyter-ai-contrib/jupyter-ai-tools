@@ -68,11 +68,7 @@ async def run_lab_command(command_id: str, args: Optional[Dict] = None) -> dict:
 
 
 def no_web_client(result: Any) -> bool:
-    """Whether a frontend command failed because no JupyterLab web client received it.
-
-    jupyterlab-commands-toolkit reports this with an error code. An older
-    version only times out, and the result then has no error code.
-    """
+    """Whether a frontend command failed because no JupyterLab web client received it."""
     return isinstance(result, dict) and result.get("error_code") == "no_web_client"
 
 

@@ -6,44 +6,12 @@ reports ``error_code: "no_web_client"`` and the RTC-free tools edit the file.
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, patch
 
 import nbformat
 import pytest
 
 from jupyter_ai_tools.toolkits.jupyterlab import run_all_cells, run_cell
 from jupyter_ai_tools.toolkits.notebook import _run_cells, add_cell, read_notebook_json
-
-try:
-    from jupyterlab_commands_toolkit.tools import NoWebClientError  # noqa: F401
-except ImportError:
-    NoWebClientError = None
-
-
-@pytest.fixture(autouse=True)
-def no_web_client_error():
-    """
-    Report a missing web client, with a release of jupyterlab-commands-toolkit that does not.
-    """
-    if NoWebClientError is not None:
-        yield
-        return
-    error = {
-        "success": False,
-        "error": "No JupyterLab web client is connected.",
-        "error_code": "no_web_client",
-    }
-    targets = [
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
-        "jupyter_ai_tools.toolkits.jupyterlab.run_lab_command",
-        "jupyter_ai_tools.toolkits.jupyterlab.execute_command",
-    ]
-    patches = [patch(target, new_callable=AsyncMock, return_value=error) for target in targets]
-    for p in patches:
-        p.start()
-    yield
-    for p in patches:
-        p.stop()
 
 
 @pytest.fixture
