@@ -81,6 +81,9 @@ pip install jupyter_ai_tools
 
 Without a real-time collaboration provider, the notebook tools run in the JupyterLab
 frontend through [jupyterlab-ai-commands](https://github.com/jupyter-ai-contrib/jupyterlab-ai-commands).
+The write tools save the notebook after an edit, so the file on disk matches the notebook
+in JupyterLab. When the save fails, for example because the file also changed on disk,
+the result of the tool has a `save_error`.
 When no JupyterLab tab is open, nothing holds a live model of the notebook, so the
 read and write tools (`read_notebook`, `add_cell`, `insert_cell`, `delete_cell`,
 `edit_cell`, ...) read and edit the notebook file on disk instead. The result of a
