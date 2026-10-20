@@ -2,8 +2,11 @@
 Tests for the save of the notebook after an RTC-free edit in the JupyterLab web client.
 """
 
+import os
+import tempfile
 from unittest.mock import AsyncMock, patch
 
+import nbformat
 import pytest
 
 from jupyter_ai_tools.toolkits.notebook import add_cell, delete_cell, edit_cell, insert_cell
@@ -11,16 +14,17 @@ from jupyter_ai_tools.toolkits.notebook import add_cell, delete_cell, edit_cell,
 SAVE = "jupyterlab-ai-commands:save-notebook"
 OK = {"success": True, "result": {"success": True}}
 FAILED = {"success": False, "error": "Cell not found"}
+NO_WEB_CLIENT = {"success": False, "error": "No web client", "error_code": "no_web_client"}
 INFO = {"success": True, "result": {"cells": [{"cellId": "cell-1"}]}}
 
 pytestmark = pytest.mark.asyncio
 
 EDITS = {
-    "add_cell": lambda: add_cell("nb.ipynb", "x = 1"),
-    "insert_cell": lambda: insert_cell("nb.ipynb", "x = 1", insert_index=0),
-    "delete_cell": lambda: delete_cell("nb.ipynb", "cell-1"),
-    "edit_cell": lambda: edit_cell("nb.ipynb", "cell-1", content="x = 2"),
-    "edit_cell_type": lambda: edit_cell("nb.ipynb", "cell-1", cell_type="markdown"),
+    "add_cell": lambda path: add_cell(path, "x = 1"),
+    "insert_cell": lambda path: insert_cell(path, "x = 1", insert_index=0),
+    "delete_cell": lambda path: delete_cell(path, "cell-1"),
+    "edit_cell": lambda path: edit_cell(path, "cell-1", content="x = 2"),
+    "edit_cell_type": lambda path: edit_cell(path, "cell-1", cell_type="markdown"),
 }
 
 
@@ -35,6 +39,17 @@ def _rtc_free():
         ),
     ):
         yield
+
+
+@pytest.fixture
+def notebook_path():
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [nbformat.v4.new_code_cell("x = 1", id="cell-1")]
+    fd, path = tempfile.mkstemp(suffix=".ipynb")
+    with os.fdopen(fd, "w") as f:
+        nbformat.write(nb, f)
+    yield path
+    os.remove(path)
 
 
 def frontend(edit_result=OK, save_result=OK):
@@ -63,7 +78,7 @@ def saves(mock):
 @pytest.mark.parametrize("edit", EDITS)
 async def test_saves_after_edit(edit):
     with frontend() as mock:
-        result = await EDITS[edit]()
+        result = await EDITS[edit]("nb.ipynb")
     assert result == OK
     assert saves(mock) == [(SAVE, {"notebookPath": "nb.ipynb"})]
 
@@ -71,15 +86,30 @@ async def test_saves_after_edit(edit):
 @pytest.mark.parametrize("edit", EDITS)
 async def test_no_save_after_failed_edit(edit):
     with frontend(edit_result=FAILED) as mock:
-        result = await EDITS[edit]()
+        result = await EDITS[edit]("nb.ipynb")
     assert result == FAILED
+    assert saves(mock) == []
+
+
+@pytest.mark.parametrize("edit", EDITS)
+async def test_no_save_after_edit_of_the_file(edit, notebook_path):
+    """
+    An edit that went to the notebook file, as no web client is connected, is on disk.
+    """
+    with patch(
+        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        new_callable=AsyncMock,
+        return_value=NO_WEB_CLIENT,
+    ) as mock:
+        result = await EDITS[edit](notebook_path)
+    assert result["success"]
     assert saves(mock) == []
 
 
 @pytest.mark.parametrize("edit", EDITS)
 async def test_reports_failed_save(edit):
     with frontend(save_result={"success": False, "error": "Command timed out"}):
-        result = await EDITS[edit]()
+        result = await EDITS[edit]("nb.ipynb")
     assert result["success"]
     assert result["save_error"] == "Command timed out"
 
