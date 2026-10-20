@@ -1,103 +1,28 @@
-import asyncio
-import difflib
 import json
 import logging
 import os
-import re
-import weakref
 from functools import lru_cache
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
-from urllib.parse import unquote
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
 import nbformat
-from jupyter_ydoc import YNotebook
-from nbclient import NotebookClient
-from pycrdt import Assoc, Text
-from tornado import web
 
+from ..adapters._notebook_helpers import (
+    get_cell_index_from_id_json,
+    get_cell_index_from_id_nbformat,
+    process_notebook_output,
+    write_notebook_file,
+)
+from ..adapters.notebook import get_adapter
 from ..utils import (
     cell_to_md,
-    command_result,
-    get_file_id,
-    get_global_awareness,
-    get_jupyter_ydoc,
-    get_serverapp,
-    no_web_client,
     normalize_filepath,
     notebook_json_to_md,
-    rtc_available,
-    run_lab_command,
 )
 
 if TYPE_CHECKING:
     from mcp.types import ImageContent
 
 logger = logging.getLogger(__name__)
-
-
-def clean_text(text: Union[str, list, None]) -> Optional[str]:
-    """Clean and format text output.
-
-    Args:
-        text: Text data that might be string, list, or None
-
-    Returns:
-        Cleaned text string or None
-    """
-    if text is None:
-        return None
-    if isinstance(text, list):
-        return "".join(str(item) for item in text)
-    return str(text)
-
-
-def process_notebook_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Process a Jupyter notebook cell output into a standardized format.
-
-    Args:
-        output_data: Raw output data from notebook cell
-
-    Returns:
-        Processed output dictionary with standardized format
-    """
-    output_type = output_data.get("output_type")
-
-    if output_type == "stream":
-        return {"output_type": output_type, "text": clean_text(output_data.get("text", ""))}
-
-    elif output_type in ["execute_result", "display_data"]:
-        data = output_data.get("data", {})
-        return {
-            "output_type": output_type,
-            "text": clean_text(data.get("text/plain")),
-            "image": extract_image_data(data) if data else None,
-        }
-
-    elif output_type == "error":
-        ename = output_data.get("ename", "")
-        evalue = output_data.get("evalue", "")
-        traceback = "\n".join(output_data.get("traceback", []))
-        error_text = f"{ename}: {evalue}\n{traceback}"
-        return {"output_type": output_type, "text": clean_text(error_text)}
-
-    return output_data
-
-
-def extract_image_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Extract image data from notebook output data.
-
-    Args:
-        data: Output data dictionary that may contain various MIME types
-
-    Returns:
-        Extracted image data or None
-    """
-    for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/svg+xml"]:
-        if mime_type in data:
-            return {"mime_type": mime_type, "data": data[mime_type]}
-    return None
 
 
 def format_notebook_cell(
@@ -213,44 +138,19 @@ async def read_notebook(file_path: str, include_outputs=False) -> str:
 async def read_notebook_json(file_path: str) -> Dict[str, Any]:
     """Returns the complete notebook content as a JSON dictionary.
 
-    This is the single choke point every read tool goes through to obtain the
-    notebook as an nbformat dict.
-
-    When no RTC provider is active (the RTC-free case), the write tools mutate
-    the live in-browser notebook model via jupyterlab-ai-commands *without*
-    saving to disk -- saving is left to the human. Reading from disk would
-    therefore return stale content (see issue #39). To stay consistent with the
-    write tools, we read the live model through the
-    ``jupyterlab-ai-commands:get-notebook-content`` frontend command, which
-    returns the current (possibly unsaved) nbformat JSON.
-
-    When an RTC provider is active, the server owns a live YDoc that is synced
-    to the filesystem, so the on-disk content is already current and we read it
-    directly. The same applies when no web client is connected: nothing holds a
-    live model, so the file on disk is read.
+    With RTC, reads from disk (the YDoc is kept in sync with the filesystem).
+    Without RTC, reads the live model from the JupyterLab frontend (avoiding
+    stale disk content when the notebook has unsaved edits), falling back to
+    disk when no browser is connected.
 
     Args:
-        file_path:
-            The relative path to the notebook file. Passed to the frontend
-            command as-is (mirroring the write tools); normalized to an absolute
-            filesystem path only for the on-disk read.
+        file_path: The relative path to the notebook file.
 
     Returns:
         A dictionary containing the complete notebook structure.
     """
-    if not rtc_available():
-        # RTC-free: read the live model (mirrors how the write tools operate).
-        res = await run_lab_command(
-            "jupyterlab-ai-commands:get-notebook-content",
-            {"notebookPath": file_path},
-        )
-        if not no_web_client(res):
-            return command_result(res)["content"]
-
-    normalized_path = normalize_filepath(file_path)
-    with open(normalized_path, "r", encoding="utf-8") as f:
-        notebook_dict = json.load(f)
-        return notebook_dict
+    adapter = await get_adapter(file_path)
+    return await adapter.read(file_path)
 
 
 async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) -> str:
@@ -308,7 +208,7 @@ async def read_cell_json(file_path: str, cell_id: str) -> Tuple[Dict[str, Any], 
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
         notebook_json = await read_notebook_json(file_path)
-        cell_index = _get_cell_index_from_id_json(notebook_json, resolved_cell_id)
+        cell_index = get_cell_index_from_id_json(notebook_json, resolved_cell_id)
 
         if cell_index is not None and 0 <= cell_index < len(notebook_json["cells"]):
             cell = notebook_json["cells"][cell_index]
@@ -476,328 +376,6 @@ async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
         raise
 
 
-_NEW_CELL = {
-    "code": nbformat.v4.new_code_cell,
-    "markdown": nbformat.v4.new_markdown_cell,
-    "raw": nbformat.v4.new_raw_cell,
-}
-
-
-def _read_notebook_file(file_path: str):
-    with open(file_path, "r", encoding="utf-8") as f:
-        return nbformat.read(f, as_version=nbformat.NO_CONVERT)
-
-
-def _write_notebook_file(file_path: str, notebook) -> None:
-    with open(file_path, "w", encoding="utf-8") as f:
-        nbformat.write(notebook, f)
-
-
-def _file_result(message: str, **fields) -> dict:
-    """Build the result of a write tool that edited the notebook file on disk.
-
-    The message tells the agent that the edit went to the file, not to a
-    notebook open in JupyterLab.
-    """
-    return {"success": True, "result": {"message": message, **fields}}
-
-
-def _add_cell_to_file(
-    file_path: str,
-    content: Optional[str],
-    cell_id: Optional[str],
-    add_above: bool,
-    cell_type: str,
-) -> str:
-    """Add a cell to the notebook file on disk and return the id of the new cell."""
-    notebook = _read_notebook_file(file_path)
-    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id) if cell_id else None
-    insert_index = _determine_insert_index(len(notebook.cells), cell_index, add_above)
-    return _insert_cell_in_file(file_path, content, insert_index, cell_type, notebook)
-
-
-def _insert_cell_in_file(
-    file_path: str,
-    content: Optional[str],
-    insert_index: Optional[int],
-    cell_type: str,
-    notebook=None,
-) -> str:
-    """Insert a cell in the notebook file on disk and return the id of the new cell."""
-    if notebook is None:
-        notebook = _read_notebook_file(file_path)
-    if insert_index is None:
-        insert_index = len(notebook.cells)
-    cell = _NEW_CELL[cell_type](source=content or "")
-    notebook.cells.insert(insert_index, cell)
-    _write_notebook_file(file_path, notebook)
-    return cell.id
-
-
-def _delete_cell_from_file(file_path: str, cell_id: str) -> Optional[int]:
-    """Delete a cell from the notebook file on disk and return its former index."""
-    notebook = _read_notebook_file(file_path)
-    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
-    if cell_index is not None:
-        notebook.cells.pop(cell_index)
-        _write_notebook_file(file_path, notebook)
-    return cell_index
-
-
-def _edit_cell_in_file(
-    file_path: str,
-    cell_id: str,
-    content: Optional[str],
-    cell_type: Optional[str],
-) -> None:
-    """Edit the content and/or type of a cell in the notebook file on disk."""
-    notebook = _read_notebook_file(file_path)
-    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
-    if cell_index is None:
-        raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
-
-    old_cell = notebook.cells[cell_index]
-    source = content if content is not None else old_cell.source
-
-    if cell_type is not None and cell_type != old_cell.cell_type:
-        new_cell = _NEW_CELL[cell_type](source=source)
-        if getattr(old_cell, "id", None):
-            new_cell.id = old_cell.id
-        new_cell.metadata.update(old_cell.get("metadata", {}))
-        notebook.cells[cell_index] = new_cell
-    elif content is not None:
-        old_cell.source = content
-    else:
-        return
-    _write_notebook_file(file_path, notebook)
-
-
-# One lock for each notebook, so that its runs and the creation of its session do not
-# overlap. The runs that hold or wait for a lock keep it alive.
-_notebook_locks: "weakref.WeakValueDictionary[str, asyncio.Lock]" = weakref.WeakValueDictionary()
-
-_MAX_OUTPUT_TEXT = 10000
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-
-
-def _notebook_lock(path: str) -> asyncio.Lock:
-    lock = _notebook_locks.get(path)
-    if lock is None:
-        lock = _notebook_locks[path] = asyncio.Lock()
-    return lock
-
-
-def _session_path(file_path: str) -> str:
-    """
-    Return the path of a notebook relative to the server root, as the sessions store it.
-
-    The symlinks stay, as in the session paths of JupyterLab.
-    """
-    root_dir = get_serverapp().root_dir
-    for root in (root_dir, os.path.realpath(root_dir)):
-        path = os.path.relpath(os.path.join(root, unquote(file_path)), root)
-        if path != os.pardir and not path.startswith(os.pardir + os.sep):
-            return Path(path).as_posix()
-    raise ValueError(f"{file_path=} is not in the root directory of the server: {root_dir}")
-
-
-async def _get_notebook_kernel(path: str, notebook):
-    """
-    Return the kernel manager of the notebook session, and start a session if there is none.
-
-    JupyterLab connects to the same session when it opens the notebook.
-    """
-    serverapp = get_serverapp()
-    try:
-        session = await serverapp.session_manager.get_session(path=path)
-    # jupyter_server < 1.13.2 raises a KeyError when the kernel of the session was culled.
-    except (web.HTTPError, KeyError):
-        session = await serverapp.session_manager.create_session(
-            path=path,
-            name=os.path.basename(path),
-            type="notebook",
-            kernel_name=notebook.metadata.get("kernelspec", {}).get("name") or None,
-        )
-    return serverapp.kernel_manager.get_kernel(session["kernel"]["id"])
-
-
-async def _read_notebook_to_run(file_path: str):
-    """
-    Read the current content of a notebook, from the YDoc when an RTC room holds it.
-
-    Until the room saves the YDoc, the file on disk has older content.
-    """
-    content = None
-    if rtc_available():
-        ydoc = await get_jupyter_ydoc(await get_file_id(file_path))
-        if ydoc is not None:
-            content = ydoc.get()
-    if content is None:
-        content = await read_notebook_json(file_path)
-    return nbformat.reads(json.dumps(content), as_version=nbformat.NO_CONVERT)
-
-
-def _write_cell_outputs(file_path: str, cell_index: int, cell) -> None:
-    """
-    Write the outputs and execution count of a cell to the notebook file on disk.
-
-    The file is read again, as other tools can edit it while the cell runs.
-    A cell without an id (nbformat < 4.5) is found by its index.
-    """
-    notebook = _read_notebook_file(file_path)
-    index = _get_cell_index_from_id_nbformat(notebook, cell.id) if "id" in cell else cell_index
-    if index is None or index >= len(notebook.cells) or notebook.cells[index].cell_type != "code":
-        return
-    notebook.cells[index].outputs = cell.outputs
-    notebook.cells[index].execution_count = cell.execution_count
-    _write_notebook_file(file_path, notebook)
-
-
-def _summarize_outputs(outputs, budget: int) -> Tuple[List[Dict[str, Any]], int]:
-    """
-    Process outputs for a tool result, and return them with the remaining text budget.
-
-    The result has no image data and no ANSI codes, and its text stops at the budget.
-    """
-    summaries = []
-    for output in outputs:
-        summary = dict(process_notebook_output(output))
-        if summary.get("image"):
-            summary["image"] = {"mime_type": summary["image"]["mime_type"]}
-        if summary.get("text"):
-            text = _ANSI_ESCAPE.sub("", summary["text"])
-            if len(text) > budget:
-                text = text[:budget] + "\n[Output truncated]"
-            budget = max(budget - len(text), 0)
-            summary["text"] = text
-        summaries.append(summary)
-    return summaries, budget
-
-
-async def _until_kernel_restart(km, coro):
-    """
-    Await a coroutine that waits for kernel replies, and stop it if the kernel restarts,
-    as the replies then never come. nbclient already stops when the kernel dies.
-    """
-    # A restart keeps the provisioner, but replaces its process.
-    process = getattr(getattr(km, "provisioner", None), "process", None)
-    task = asyncio.ensure_future(coro)
-    try:
-        while not task.done():
-            await asyncio.wait({task}, timeout=1)
-            restarted = getattr(getattr(km, "provisioner", None), "process", None) is not process
-            if not task.done() and restarted:
-                raise RuntimeError("The kernel restarted during the run")
-        return task.result()
-    finally:
-        task.cancel()
-
-
-async def _execute_cells(
-    client: NotebookClient, cell_indices: List[int], file_path: str, write_outputs: bool
-) -> List[Dict[str, Any]]:
-    """
-    Execute cells with an nbclient client, and stop at the first cell with an error.
-    """
-    results: List[Dict[str, Any]] = []
-    budget = _MAX_OUTPUT_TEXT
-    for cell_index in cell_indices:
-        cell = client.nb.cells[cell_index]
-        result: Dict[str, Any] = {"cellId": cell.get("id"), "status": "no-op"}
-        results.append(result)
-        if cell.cell_type != "code":
-            continue
-        if cell.source.strip():
-            await client.async_execute_cell(cell, cell_index)
-            result["status"] = "ok"
-        else:
-            # As in JupyterLab, an empty cell does not run, and loses its outputs.
-            cell.outputs = []
-            cell.execution_count = None
-        if write_outputs:
-            _write_cell_outputs(file_path, cell_index, cell)
-        outputs, budget = _summarize_outputs(cell.outputs, budget)
-        result.update(executionCount=cell.execution_count, outputs=outputs)
-        error = next((o for o in cell.outputs if o.output_type == "error"), None)
-        if error is not None:
-            result.update(status="error", errorName=error.ename, errorValue=error.evalue)
-            break
-    return results
-
-
-async def _run_cells(
-    file_path: str, cell_id: Optional[str] = None, write_outputs: bool = True
-) -> dict:
-    """
-    Run a cell, or all the code cells, of a notebook in the kernel of its session.
-
-    With write_outputs, the outputs go to the notebook file after each cell. Without it,
-    the notebook does not change. The result has the outputs, with a limit on their size.
-    The run stops at the first cell with an error, as in JupyterLab.
-    """
-    path = _session_path(file_path)
-    async with _notebook_lock(path):
-        notebook = await _read_notebook_to_run(file_path)
-        if cell_id is None:
-            cell_indices = [i for i, cell in enumerate(notebook.cells) if cell.cell_type == "code"]
-        else:
-            cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
-            if cell_index is None:
-                raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
-            cell_indices = [cell_index]
-
-        km = await _get_notebook_kernel(path, notebook)
-        # Not km.client(): it shares the session of the manager, so its socket identity is
-        # the same as other clients, and the kernel can send the replies to the wrong one.
-        kc = km.client_factory(parent=km)
-        kc.load_connection_info(km.get_connection_info())
-        # JupyterLab also runs the cells with the skip-execution tag.
-        client = NotebookClient(notebook, km=km, allow_errors=True, skip_cells_with_tag="")
-        client.kc = kc
-        try:
-            # Without stdin, input() fails at once, as no one can reply to it.
-            kc.start_channels(stdin=False, hb=False, control=False)
-            await kc.wait_for_ready(timeout=None)
-            cells = await _until_kernel_restart(
-                km,
-                _execute_cells(client, cell_indices, normalize_filepath(file_path), write_outputs),
-            )
-        finally:
-            kc.stop_channels()
-
-    if write_outputs:
-        message = (
-            "Ran in the kernel of the notebook on the server, as the notebook is not open "
-            "in JupyterLab. The outputs are in the notebook file on disk."
-        )
-    else:
-        message = "Ran in the kernel of the notebook on the server. The notebook did not change."
-    if cell_id is not None:
-        return {"success": True, "result": {"message": message, **cells[0]}}
-    # The run stops at the first error, so only the last cell can have one.
-    status = "error" if cells and cells[-1]["status"] == "error" else "ok"
-    return {"success": True, "result": {"message": message, "status": status, "cells": cells}}
-
-
-def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
-    """True iff the notebook has exactly one cell and it is empty.
-
-    Mirrors jupyterlab-ai-commands' add-cell behavior, which replaces a lone
-    empty first cell instead of appending a new one, so the RTC and RTC-free
-    paths agree.
-    """
-    try:
-        cells = ydoc.get().get("cells", [])
-        if len(cells) != 1:
-            return False
-        source = cells[0].get("source", "")
-        if isinstance(source, list):
-            source = "".join(source)
-        return not source.strip()
-    except Exception:
-        return False
-
-
 async def add_cell(
     file_path: str,
     content: Optional[str] = None,
@@ -808,92 +386,18 @@ async def add_cell(
 ):
     """Adds a new cell to the Jupyter notebook above or below a specified cell.
 
-    This function adds a new cell to a Jupyter notebook. It first attempts to use
-    the in-memory YDoc representation if the notebook is currently active. If the
-    notebook is not active, it falls back to using the filesystem to read, modify,
-    and write the notebook file directly.
-
     Args:
-        file_path:
-            The relative path to the notebook file on the filesystem.
-        content:
-            The content of the new cell. If None, an empty cell is created.
-        cell_id:
-            The nbformat id of the cell to add relative to. If None,
-            the cell is added at the end of the notebook.
-        add_above:
-            If True, the cell is added above the specified cell. If False,
-            it's added below the specified cell.
-        cell_type:
-            The type of cell to add ("code", "markdown", "raw").
+        file_path: The relative path to the notebook file on the filesystem.
+        content: The content of the new cell. If None, an empty cell is created.
+        cell_id: The nbformat id of the reference cell. If None, adds at the end.
+        add_above: If True, the cell is added above the reference cell.
+        cell_type: The type of cell to add ("code", "markdown", "raw").
 
     Returns:
         None
     """
-    if not rtc_available():
-        # RTC-free: drive the JupyterLab frontend via jupyterlab-ai-commands.
-        result = await run_lab_command(
-            "jupyterlab-ai-commands:add-cell",
-            {
-                "notebookPath": file_path,
-                "referenceCellId": cell_id,
-                "content": content or "",
-                "cellType": cell_type,
-                "position": "above" if add_above else "below",
-            },
-        )
-        if not no_web_client(result):
-            return result
-        new_cell_id = _add_cell_to_file(
-            normalize_filepath(file_path), content, cell_id, add_above, cell_type
-        )
-        return _file_result(
-            f"{cell_type} cell added to the notebook file on disk, "
-            "as the notebook is not open in JupyterLab",
-            cellId=new_cell_id,
-        )
-    try:
-        file_path = normalize_filepath(file_path)
-        # Resolve cell_id in case it's an index
-        resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
-        ydoc: YNotebook = await get_jupyter_ydoc(file_id)
-
-        if ydoc:
-            cells_count = ydoc.cell_number
-            cell_index = (
-                _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id) if resolved_cell_id else None
-            )
-            insert_index = _determine_insert_index(cells_count, cell_index, add_above)
-
-            cell: Dict[str, Any] = {
-                "cell_type": cell_type,
-                "source": "",
-            }
-            if cell_type == "code":
-                cell["execution_count"] = None
-                cell["outputs"] = []
-            ycell = ydoc.create_ycell(cell)
-            if _is_single_empty_notebook(ydoc):
-                # Match jupyterlab-ai-commands: replace a single empty first
-                # cell instead of adding a new one.
-                del ydoc.ycells[0]
-                ydoc.ycells.append(ycell)
-            elif insert_index >= cells_count:
-                ydoc.ycells.append(ycell)
-            else:
-                ydoc.ycells.insert(insert_index, ycell)
-            if animate:
-                await write_to_cell_collaboratively(ydoc, ycell, content or "")
-            else:
-                _atomic_replace_cell_source(ycell, content or "")
-        else:
-            _add_cell_to_file(file_path, content, resolved_cell_id, add_above, cell_type)
-
-        return None
-    except Exception:
-        raise
+    adapter = await get_adapter(file_path)
+    return await adapter.add_cell(file_path, content, cell_id, add_above, cell_type, animate)
 
 
 async def insert_cell(
@@ -905,102 +409,21 @@ async def insert_cell(
 ):
     """Inserts a new cell to the Jupyter notebook at the specified cell index.
 
-    This function adds a new cell to a Jupyter notebook. It first attempts to use
-    the in-memory YDoc representation if the notebook is currently active. If the
-    notebook is not active, it falls back to using the filesystem to read, modify,
-    and write the notebook file directly.
-
     Args:
-        file_path:
-            The relative path to the notebook file on the filesystem.
-        content:
-            The content of the new cell. If None, an empty cell is created.
-        insert_index:
-            The index to insert the cell at.
-        cell_type:
-            The type of cell to add ("code", "markdown", "raw").
+        file_path: The relative path to the notebook file on the filesystem.
+        content: The content of the new cell. If None, an empty cell is created.
+        insert_index: The index to insert the cell at.
+        cell_type: The type of cell to add ("code", "markdown", "raw").
 
     Returns:
         None
     """
-    if not rtc_available():
-        # RTC-free: jupyterlab-ai-commands add-cell is reference-cell based, so
-        # translate the target index into a (reference cell, position).
-        info = await run_lab_command(
-            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": file_path}
-        )
-        if no_web_client(info):
-            new_cell_id = _insert_cell_in_file(
-                normalize_filepath(file_path), content, insert_index, cell_type
-            )
-            return _file_result(
-                f"{cell_type} cell inserted in the notebook file on disk, "
-                "as the notebook is not open in JupyterLab",
-                cellId=new_cell_id,
-            )
-        if not info.get("success"):
-            return info
-        cells = (info.get("result") or {}).get("cells") or []
-        idx = insert_index if insert_index is not None else len(cells)
-        if not cells:
-            ref, position = None, "below"
-        elif idx <= 0:
-            ref, position = cells[0]["cellId"], "above"
-        elif idx >= len(cells):
-            ref, position = cells[-1]["cellId"], "below"
-        else:
-            ref, position = cells[idx]["cellId"], "above"
-        return await run_lab_command(
-            "jupyterlab-ai-commands:add-cell",
-            {
-                "notebookPath": file_path,
-                "referenceCellId": ref,
-                "content": content or "",
-                "cellType": cell_type,
-                "position": position,
-            },
-        )
-    try:
-        file_path = normalize_filepath(file_path)
-        file_id = await get_file_id(file_path)
-        ydoc = await get_jupyter_ydoc(file_id)
-
-        if ydoc:
-            cells_count = ydoc.cell_number
-
-            cell: Dict[str, Any] = {
-                "cell_type": cell_type,
-                "source": "",
-            }
-            if cell_type == "code":
-                cell["execution_count"] = None
-                cell["outputs"] = []
-            ycell = ydoc.create_ycell(cell)
-            if _is_single_empty_notebook(ydoc):
-                del ydoc.ycells[0]
-                ydoc.ycells.append(ycell)
-            elif insert_index is None or insert_index >= cells_count:
-                ydoc.ycells.append(ycell)
-            else:
-                ydoc.ycells.insert(insert_index, ycell)
-            if animate:
-                await write_to_cell_collaboratively(ydoc, ycell, content or "")
-            else:
-                _atomic_replace_cell_source(ycell, content or "")
-        else:
-            _insert_cell_in_file(file_path, content, insert_index, cell_type)
-
-    except Exception:
-        raise
+    adapter = await get_adapter(file_path)
+    return await adapter.insert_cell(file_path, content, insert_index, cell_type, animate)
 
 
 async def delete_cell(file_path: str, cell_id: str):
     """Removes a notebook cell with the specified cell ID.
-
-    This function deletes a cell from a Jupyter notebook. It first attempts to use
-    the in-memory YDoc representation if the notebook is currently active. If the
-    notebook is not active, it falls back to using the filesystem to read, modify,
-    and write the notebook file directly using nbformat.
 
     Args:
         file_path: The relative path to the notebook file on the filesystem.
@@ -1009,446 +432,8 @@ async def delete_cell(file_path: str, cell_id: str):
     Returns:
         None
     """
-    if not rtc_available():
-        result = await run_lab_command(
-            "jupyterlab-ai-commands:delete-cell",
-            {"notebookPath": file_path, "cellId": cell_id},
-        )
-        if not no_web_client(result):
-            return result
-        if _delete_cell_from_file(normalize_filepath(file_path), cell_id) is None:
-            raise ValueError(f"Could not find cell index for {cell_id=}")
-        return _file_result(
-            "Cell deleted from the notebook file on disk, "
-            "as the notebook is not open in JupyterLab",
-            cellId=cell_id,
-        )
-    try:
-        file_path = normalize_filepath(file_path)
-        # Resolve cell_id in case it's an index
-        resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
-        ydoc = await get_jupyter_ydoc(file_id)
-
-        if ydoc:
-            cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
-            if cell_index is not None and 0 <= cell_index < len(ydoc.ycells):
-                del ydoc.ycells[cell_index]
-            else:
-                pass  # Cell not found in ydoc
-        else:
-            cell_index = _delete_cell_from_file(file_path, resolved_cell_id)
-
-        if cell_index is None:
-            raise ValueError(f"Could not find cell index for {cell_id=}")
-
-        return {"success": True}
-    except Exception:
-        raise
-
-
-def get_cursor_details(
-    cell_source: Text, start_index: int, stop_index: Optional[int] = None
-) -> Dict[str, Any]:
-    """
-    Creates cursor details for collaborative notebook cursor positioning.
-
-    This function constructs the cursor details object required by the YNotebook
-    awareness system to show cursor positions in collaborative editing environments.
-    It handles both single cursor positions and text selections.
-
-    Args:
-        cell_source: The YText source object representing the cell content
-        start_index: The starting position of the cursor (0-based index)
-        stop_index: The ending position for selections (optional)
-
-    Returns:
-        dict: Cursor details object with head, anchor, and selection state
-
-    Example:
-        >>> details = get_cursor_details(cell_source, 10)  # Single cursor at position 10
-        >>> details = get_cursor_details(cell_source, 5, 15)  # Selection from 5 to 15
-    """
-    # Create sticky index for the head position (where cursor starts)
-    head_sticky_index = cell_source.sticky_index(start_index, Assoc.BEFORE)
-    head_sticky_index_data = head_sticky_index.to_json()
-
-    # Initialize cursor details with default values
-    cursor_details: Dict[str, Any] = {"primary": True, "empty": True}
-
-    # Set the head position (where cursor starts)
-    cursor_details["head"] = {
-        "type": head_sticky_index_data["item"],
-        "tname": None,
-        "item": head_sticky_index_data["item"],
-        "assoc": 0,
-    }
-
-    # By default, anchor is same as head (no selection)
-    cursor_details["anchor"] = cursor_details["head"]
-
-    # If stop_index is provided, create a selection
-    if stop_index is not None:
-        anchor_sticky_index = cell_source.sticky_index(stop_index, Assoc.BEFORE)
-        anchor_sticky_index_data = anchor_sticky_index.to_json()
-        cursor_details["anchor"] = {
-            "type": anchor_sticky_index_data["item"],
-            "tname": None,
-            "item": anchor_sticky_index_data["item"],
-            "assoc": 0,
-        }
-        cursor_details["empty"] = False  # Not empty when there's a selection
-
-    return cursor_details
-
-
-def set_cursor_in_ynotebook(
-    ynotebook: YNotebook, cell_source: Text, start_index: int, stop_index: Optional[int] = None
-) -> None:
-    """
-    Sets the cursor position in a collaborative notebook environment.
-
-    This function updates the cursor position in the YNotebook awareness system,
-    which allows other collaborators to see where the cursor is positioned.
-    It handles both single cursor positions and text selections.
-
-    Args:
-        ynotebook: The YNotebook instance representing the collaborative notebook
-        cell_source: The YText source object representing the cell content
-        start_index: The starting position of the cursor (0-based index)
-        stop_index: The ending position for selections (optional)
-
-    Returns:
-        None: This function does not return a value
-
-    Note:
-        This function silently ignores any errors that occur during cursor setting
-        to avoid breaking the main collaborative editing operations.
-
-    Example:
-        >>> set_cursor_in_ynotebook(ynotebook, cell_source, 10)  # Set cursor at position 10
-        >>> set_cursor_in_ynotebook(ynotebook, cell_source, 5, 15)  # Select text from 5 to 15
-    """
-    try:
-        # Get cursor details for the specified position/selection
-        details = get_cursor_details(cell_source, start_index, stop_index=stop_index)
-
-        # Update the awareness system with the cursor position
-        if ynotebook.awareness:
-            ynotebook.awareness.set_local_state_field("cursors", [details])
-    except Exception:
-        # Silently ignore cursor setting errors to avoid breaking main operations
-        # This is intentional - cursor positioning is a visual enhancement, not critical
-        pass
-
-
-def _atomic_replace_cell_source(ycell, content: str) -> None:
-    """Atomically replaces cell source: clear then insert new, no await between ops."""
-    old_content = ycell.to_py().get("source", "")
-    if old_content == content:
-        return
-    cell_source = ycell["source"]
-    cell_source.clear()
-    cell_source += content
-
-
-async def write_to_cell_collaboratively(
-    ynotebook, ycell, content: str, typing_speed: float = 0.1
-) -> bool:
-    """
-    Writes content to a Jupyter notebook cell with collaborative typing simulation.
-
-    This function provides a collaborative writing experience by applying text changes
-    incrementally with visual feedback. It uses a diff-based approach to compute the
-    minimal set of changes needed and applies them with cursor positioning and timing
-    delays to simulate natural typing behavior.
-
-    The function handles three types of operations:
-    - Delete: Removes text with visual highlighting
-    - Insert: Adds text word-by-word with typing delays
-    - Replace: Combines delete and insert operations
-
-    Args:
-        ynotebook: The YNotebook instance representing the collaborative notebook
-        ycell: The YCell instance representing the specific cell to modify
-        content: The new content to write to the cell
-        typing_speed: Delay in seconds between typing operations (default: 0.1)
-
-    Returns:
-        bool: True if the operation completed successfully
-
-    Raises:
-        ValueError: If ynotebook/ycell is None or typing_speed is negative
-        TypeError: If content is not a string
-        RuntimeError: If cell content extraction or writing fails
-
-    Example:
-        >>> # Write with default typing speed
-        >>> success = await write_to_cell_collaboratively(ynotebook, ycell, "print('Hello')")
-        >>>
-        >>> # Write with custom typing speed (faster)
-        >>> success = await write_to_cell_collaboratively(
-        ...     ynotebook, ycell, "print('World')", typing_speed=0.05
-        ... )
-    """
-    # Input validation
-    if ynotebook is None:
-        raise ValueError("ynotebook cannot be None")
-    if ycell is None:
-        raise ValueError("ycell cannot be None")
-    if not isinstance(content, str):
-        raise TypeError("content must be a string")
-    if typing_speed < 0:
-        raise ValueError("typing_speed must be non-negative")
-
-    try:
-        # Extract current cell content
-        cell = ycell.to_py()
-        old_content = cell.get("source", "")
-        cell_source = ycell["source"]  # YText object for collaborative editing
-        new_content = content
-
-        # Early return if content is unchanged
-        if old_content == new_content:
-            return True
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to extract cell content: {e}")
-
-    try:
-        # Compute the minimal set of changes needed using difflib
-        sequence_matcher = difflib.SequenceMatcher(None, old_content, new_content)
-        cursor_position = 0
-
-        # Set initial cursor position
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-
-        # Apply each change operation sequentially
-        for operation, old_start, old_end, new_start, new_end in sequence_matcher.get_opcodes():
-            if operation == "equal":
-                # No changes needed for this segment, just advance cursor
-                cursor_position += old_end - old_start
-
-            elif operation == "delete":
-                # Remove text with visual feedback
-                delete_length = old_end - old_start
-                await _handle_delete_operation(
-                    ynotebook, cell_source, cursor_position, delete_length, typing_speed
-                )
-                # Cursor stays at same position after deletion
-
-            elif operation == "insert":
-                # Add text with typing simulation
-                cursor_position = await _handle_insert_operation(
-                    ynotebook,
-                    cell_source,
-                    cursor_position,
-                    new_content,
-                    new_start,
-                    new_end,
-                    typing_speed,
-                )
-
-            elif operation == "replace":
-                # Combine delete and insert operations
-                delete_length = old_end - old_start
-                cursor_position = await _handle_replace_operation(
-                    ynotebook,
-                    cell_source,
-                    cursor_position,
-                    new_content,
-                    delete_length,
-                    new_start,
-                    new_end,
-                    typing_speed,
-                )
-
-        # Set final cursor position at the end of the content
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-
-        return True
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to write cell content collaboratively: {e}")
-
-
-async def _handle_delete_operation(
-    ynotebook, cell_source, cursor_position: int, delete_length: int, typing_speed: float
-) -> None:
-    """
-    Handle deletion of text chunks with visual feedback.
-
-    This function provides visual feedback during deletion by first highlighting
-    the text to be deleted, then removing it after a delay to simulate natural
-    deletion behavior in collaborative environments.
-
-    Args:
-        ynotebook: The YNotebook instance for cursor positioning
-        cell_source: The YText source object representing the cell content
-        cursor_position: Current cursor position in the text
-        delete_length: Number of characters to delete from cursor position
-        typing_speed: Base delay between operations in seconds
-
-    Returns:
-        None
-    """
-    # Highlight the text chunk that will be deleted (visual feedback)
-    _safe_set_cursor(ynotebook, cell_source, cursor_position, cursor_position + delete_length)
-    await asyncio.sleep(min(0.3, typing_speed * 3))  # Cap highlight duration at 0.3s
-
-    # Perform the actual deletion
-    del cell_source[cursor_position : cursor_position + delete_length]
-    await asyncio.sleep(typing_speed)
-
-
-async def _handle_insert_operation(
-    ynotebook,
-    cell_source,
-    cursor_position: int,
-    new_content: str,
-    new_start: int,
-    new_end: int,
-    typing_speed: float,
-) -> int:
-    """
-    Handle insertion of text with word-by-word typing simulation.
-
-    This function simulates natural typing behavior by inserting text word-by-word
-    with appropriate delays and cursor positioning. It handles both regular text
-    and whitespace-only content appropriately.
-
-    Args:
-        ynotebook: The YNotebook instance for cursor positioning
-        cell_source: The YText source object representing the cell content
-        cursor_position: Current cursor position in the text
-        new_content: The complete new content string
-        new_start: Start index of text to insert in the new content
-        new_end: End index of text to insert in the new content
-        typing_speed: Base delay between typing operations in seconds
-
-    Returns:
-        int: The new cursor position after insertion
-    """
-    text_to_insert = new_content[new_start:new_end]
-    words = text_to_insert.split()
-
-    # Handle whitespace-only or empty insertions
-    if not words or text_to_insert.strip() == "":
-        cell_source.insert(cursor_position, text_to_insert)
-        cursor_position += len(text_to_insert)
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-        await asyncio.sleep(typing_speed)
-        return cursor_position
-
-    # Insert text word-by-word with proper spacing and punctuation
-    current_pos = 0
-    for word in words:
-        # Find the position of this word in the text
-        word_start = text_to_insert.find(word, current_pos)
-
-        # Insert any whitespace or punctuation before the word
-        if word_start > current_pos:
-            prefix = text_to_insert[current_pos:word_start]
-            cell_source.insert(cursor_position, prefix)
-            cursor_position += len(prefix)
-
-        # Insert the word itself
-        cell_source.insert(cursor_position, word)
-        cursor_position += len(word)
-        current_pos = word_start + len(word)
-
-        # Update cursor position and pause for typing effect
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-        await asyncio.sleep(typing_speed)
-
-    # Insert any remaining text after the last word (punctuation, etc.)
-    if current_pos < len(text_to_insert):
-        suffix = text_to_insert[current_pos:]
-        cell_source.insert(cursor_position, suffix)
-        cursor_position += len(suffix)
-        _safe_set_cursor(ynotebook, cell_source, cursor_position)
-
-    return cursor_position
-
-
-async def _handle_replace_operation(
-    ynotebook,
-    cell_source,
-    cursor_position: int,
-    new_content: str,
-    delete_length: int,
-    new_start: int,
-    new_end: int,
-    typing_speed: float,
-) -> int:
-    """
-    Handle replacement operations by deleting then inserting.
-
-    This function simulates natural text replacement behavior by first deleting
-    the old text (with visual feedback) and then inserting the new text with
-    typing simulation. A pause is added between operations to make the replacement
-    feel more natural.
-
-    Args:
-        ynotebook: The YNotebook instance for cursor positioning
-        cell_source: The YText source object representing the cell content
-        cursor_position: Current cursor position in the text
-        new_content: The complete new content string
-        delete_length: Number of characters to delete from cursor position
-        new_start: Start index of replacement text in the new content
-        new_end: End index of replacement text in the new content
-        typing_speed: Base delay between typing operations in seconds
-
-    Returns:
-        int: The new cursor position after replacement
-    """
-    # First, delete the old text with visual feedback
-    await _handle_delete_operation(
-        ynotebook, cell_source, cursor_position, delete_length, typing_speed
-    )
-
-    # Brief pause between deletion and insertion for natural feel
-    await asyncio.sleep(typing_speed * 2)
-
-    # Then, insert the new text with typing simulation
-    cursor_position = await _handle_insert_operation(
-        ynotebook, cell_source, cursor_position, new_content, new_start, new_end, typing_speed
-    )
-
-    return cursor_position
-
-
-def _safe_set_cursor(
-    ynotebook: YNotebook, cell_source: Text, cursor_position: int, stop_cursor: Optional[int] = None
-) -> None:
-    """
-    Safely set cursor position with error handling.
-
-    This function wraps the cursor positioning logic to prevent errors from
-    breaking the main collaborative writing operations. Since cursor positioning
-    is a visual enhancement rather than a core functionality, errors are silently
-    ignored to maintain robustness.
-
-    Args:
-        ynotebook: The YNotebook instance for cursor positioning
-        cell_source: The YText source object representing the cell content
-        cursor_position: The cursor position to set
-        stop_cursor: Optional end position for text selections
-
-    Returns:
-        None
-
-    Note:
-        This function silently ignores all exceptions to prevent cursor
-        positioning errors from interfering with the main editing operations.
-    """
-    try:
-        set_cursor_in_ynotebook(ynotebook, cell_source, cursor_position, stop_cursor)
-    except Exception:
-        # Silently ignore cursor setting errors to avoid breaking the main operation
-        # Cursor positioning is a visual enhancement, not critical functionality
-        pass
+    adapter = await get_adapter(file_path)
+    return await adapter.delete_cell(file_path, cell_id)
 
 
 async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
@@ -1461,44 +446,8 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
         File path for the first active notebook. If username is provided, then
         returns the active notebook for that specific user.
     """
-    if not rtc_available():
-        resp = await run_lab_command("jupyterlab-ai-commands:get-notebook-info", {})
-        if no_web_client(resp):
-            raise RuntimeError(resp["error"])
-        return (resp.get("result") or {}).get("notebookPath")
-    awareness = await get_global_awareness()
-    if not awareness:
-        return None
-    for _, state in awareness.states.items():
-        _username = state.get("user", {}).get("username", None)
-        if username and username != _username:
-            continue
-
-        if (active_notebook := state.get("current")) and "notebook" in active_notebook:
-            return active_notebook.replace("notebook:", "")
-
-        if documents := state.get("documents"):
-            notebooks = [doc for doc in documents if doc.endswith('.ipynb')]
-            if len(notebooks) == 1:
-                return notebooks[0]
-
-    return None
-
-
-def _get_active_cell_id_from_ydoc(ydoc: YNotebook, username: Optional[str] = None) -> Optional[str]:
-    """Internal helper: Returns the active cell id from a ydoc instance."""
-    if not ydoc or not ydoc.awareness:
-        return None
-
-    for _, state in ydoc.awareness.states.items():
-        _username = state.get("user", {}).get("username", None)
-        if username and username != _username:
-            continue
-
-        if active_cell_id := state.get("activeCellId"):
-            return active_cell_id
-
-    return None
+    adapter = await get_adapter()
+    return await adapter.get_active_notebook(username)
 
 
 async def get_active_cell_id(notebook_path: str, username: Optional[str] = None) -> Optional[str]:
@@ -1514,18 +463,8 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
     Returns:
         The active cell ID for the notebook, or None if no active cell found
     """
-    if not rtc_available():
-        resp = await run_lab_command(
-            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": notebook_path}
-        )
-        if no_web_client(resp):
-            raise RuntimeError(resp["error"])
-        return (resp.get("result") or {}).get("activeCellId")
-    file_path = normalize_filepath(notebook_path)
-    file_id = await get_file_id(file_path)
-    ydoc = await get_jupyter_ydoc(file_id)
-
-    return _get_active_cell_id_from_ydoc(ydoc, username)
+    adapter = await get_adapter(notebook_path)
+    return await adapter.get_active_cell_id(notebook_path, username)
 
 
 async def select_cell(
@@ -1546,80 +485,11 @@ async def select_cell(
         ValueError: If the cell_id is not found in the notebook
         RuntimeError: If there is no active notebook or notebook is not currently open
     """
-    from jupyterlab_commands_toolkit.tools import execute_command
-
-    if not rtc_available():
-        # RTC-free: read the current + target cell from the frontend
-        # (get-notebook-info), then navigate with the same core move-cursor
-        # commands the RTC path uses.
-        target_path = file_path or await get_active_notebook(username)
-        if not target_path:
-            raise RuntimeError("No active notebook found. Please open a notebook first.")
-        info = await run_lab_command(
-            "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": target_path}
-        )
-        if not info.get("success"):
-            return info
-        info_result = info.get("result") or {}
-        cells = info_result.get("cells") or []
-        ids = [c.get("cellId") for c in cells]
-        if cell_id not in ids:
-            raise ValueError(f"Cell with ID {cell_id} not found in notebook")
-        target_index = ids.index(cell_id)
-        active_id = info_result.get("activeCellId")
-        active_index = ids.index(active_id) if active_id in ids else 0
-        distance = target_index - active_index
-        if distance == 0:
-            return {"success": True, "result": "Already at target cell"}
-        cmd = "notebook:move-cursor-down" if distance > 0 else "notebook:move-cursor-up"
-        move_result: dict = {}
-        for _ in range(abs(distance)):
-            move_result = await execute_command(cmd)
-        return move_result
-
-    try:
-        if not file_path:
-            file_path = await get_active_notebook(username)
-        if not file_path:
-            raise RuntimeError("No active notebook found. Please open a notebook first.")
-
-        resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
-        ydoc = await get_jupyter_ydoc(file_id)
-
-        if not ydoc:
-            raise RuntimeError(f"Notebook at {file_path} is not currently open")
-
-        target_cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
-        if target_cell_index is None:
-            raise ValueError(f"Cell with ID {cell_id} not found in notebook")
-
-        active_cell_id = _get_active_cell_id_from_ydoc(ydoc, username)
-        if not active_cell_id:
-            raise RuntimeError("No active cell found. Make sure the notebook is focused.")
-
-        active_cell_index = _get_cell_index_from_id_ydoc(ydoc, active_cell_id)
-        if active_cell_index is None:
-            raise RuntimeError(f"Active cell {active_cell_id} not found in notebook")
-
-        distance = target_cell_index - active_cell_index
-
-        if distance == 0:
-            return {"success": True, "result": "Already at target cell"}
-
-        result: dict = {}
-        if distance > 0:
-            for _ in range(distance):
-                result = await execute_command("notebook:move-cursor-down")
-        else:
-            for _ in range(abs(distance)):
-                result = await execute_command("notebook:move-cursor-up")
-
-        return result
-
-    except Exception:
-        raise
+    target_path = file_path or await get_active_notebook(username)
+    if not target_path:
+        raise RuntimeError("No active notebook found. Please open a notebook first.")
+    adapter = await get_adapter(target_path)
+    return await adapter.select_cell(cell_id, username, target_path)
 
 
 async def edit_cell(
@@ -1631,25 +501,15 @@ async def edit_cell(
 ) -> dict:
     """Edits the content and/or type of a notebook cell with the specified ID.
 
-    This function modifies a cell in a Jupyter notebook. It first attempts to use
-    the in-memory YDoc representation if the notebook is currently active. If the
-    notebook is not active, it falls back to using the filesystem to read, modify,
-    and write the notebook file directly using nbformat.
-
     When changing cell type, the cell is replaced via ``set_cell()`` to ensure
     type-specific fields (outputs, execution_count) are correctly added or removed.
 
     Args:
-        file_path:
-            The relative path to the notebook file on the filesystem.
-        cell_id:
-            The nbformat id of the cell to edit.
-        content:
-            The new content for the cell. If None, the existing content is preserved.
-        cell_type:
-            The new cell type ("code", "markdown", "raw"). If None, the type is unchanged.
-        animate:
-            If True, simulate collaborative typing when changing content.
+        file_path: The relative path to the notebook file on the filesystem.
+        cell_id: The nbformat id of the cell to edit.
+        content: The new content for the cell. If None, existing content is preserved.
+        cell_type: The new cell type. If None, the type is unchanged.
+        animate: If True, simulate collaborative typing when changing content.
 
     Returns:
         A dictionary ``{"success": True}`` once the edit completes.
@@ -1657,83 +517,8 @@ async def edit_cell(
     Raises:
         ValueError: If the cell_id is not found in the notebook.
     """
-    if not rtc_available():
-        rtc_free_result: dict = {"success": True}
-        if content is not None:
-            rtc_free_result = await run_lab_command(
-                "jupyterlab-ai-commands:set-cell-content",
-                {
-                    "notebookPath": file_path,
-                    "cellId": cell_id,
-                    "content": content,
-                    "showDiff": False,
-                },
-            )
-        if cell_type is not None and rtc_free_result.get("success"):
-            # change-cell-to-* act on the selected cell, so select it first.
-            rtc_free_result = await select_cell(cell_id, file_path=file_path)
-            if rtc_free_result.get("success"):
-                type_command = {
-                    "code": "notebook:change-cell-to-code",
-                    "markdown": "notebook:change-cell-to-markdown",
-                    "raw": "notebook:change-cell-to-raw",
-                }[cell_type]
-                rtc_free_result = await run_lab_command(type_command)
-        if no_web_client(rtc_free_result):
-            _edit_cell_in_file(normalize_filepath(file_path), cell_id, content, cell_type)
-            return _file_result(
-                "Cell edited in the notebook file on disk, "
-                "as the notebook is not open in JupyterLab",
-                cellId=cell_id,
-            )
-        return rtc_free_result
-    try:
-        file_path = normalize_filepath(file_path)
-        # Resolve cell_id in case it's an index
-        resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
-        ydoc = await get_jupyter_ydoc(file_id)
-
-        if ydoc:
-            cell_index = _get_cell_index_from_id_ydoc(ydoc, resolved_cell_id)
-            if cell_index is None:
-                raise ValueError(f"Cell with {cell_id=} not found in notebook")
-
-            ycell = ydoc._ycells[cell_index]
-            old_cell = ycell.to_py()
-            old_type = old_cell.get("cell_type")
-            needs_type_change = cell_type is not None and cell_type != old_type
-            source = content if content is not None else old_cell.get("source", "")
-
-            if needs_type_change:
-                new_cell = {
-                    "cell_type": cell_type,
-                    "source": source,
-                    "id": old_cell.get("id", str(uuid4())),
-                    "metadata": old_cell.get("metadata", {}),
-                }
-                if cell_type == "code":
-                    new_cell["outputs"] = []
-                    new_cell["execution_count"] = None
-                ydoc.set_cell(cell_index, new_cell)
-                if animate and content is not None:
-                    # After replacement, write content collaboratively on the new ycell
-                    new_ycell = ydoc._ycells[cell_index]
-                    _atomic_replace_cell_source(new_ycell, "")
-                    await write_to_cell_collaboratively(ydoc, new_ycell, source)
-            else:
-                if content is not None:
-                    if animate:
-                        await write_to_cell_collaboratively(ydoc, ycell, content)
-                    else:
-                        _atomic_replace_cell_source(ycell, content)
-        else:
-            _edit_cell_in_file(file_path, resolved_cell_id, content, cell_type)
-
-        return {"success": True}
-    except Exception:
-        raise
+    adapter = await get_adapter(file_path)
+    return await adapter.edit_cell(file_path, cell_id, content, cell_type, animate)
 
 
 # Note: This is currently failing with server outputs, use `read_cell` instead
@@ -1762,91 +547,12 @@ def read_cell_nbformat(file_path: str, cell_id: str) -> Dict[str, Any]:
     with open(file_path, "r", encoding="utf-8") as f:
         notebook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 
-    cell_index = _get_cell_index_from_id_nbformat(notebook, cell_id)
+    cell_index = get_cell_index_from_id_nbformat(notebook, cell_id)
     if cell_index is not None:
         cell = notebook.cells[cell_index]
         return cell
     else:
         raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
-
-
-def _get_cell_index_from_id_json(notebook_json, cell_id: str) -> Optional[int]:
-    """Get cell index from cell_id by notebook json dict.
-
-    Args:
-        notebook_json:
-            The notebook as a JSON dictionary.
-        cell_id:
-            The UUID of the cell to find.
-
-    Returns:
-        The index of the cell in the notebook, or None if not found.
-    """
-    for i, cell in enumerate(notebook_json["cells"]):
-        if "id" in cell and cell["id"] == cell_id:
-            return i
-    return None
-
-
-def _get_cell_index_from_id_ydoc(ydoc, cell_id: str) -> Optional[int]:
-    """Get cell index from cell_id using YDoc interface.
-
-    Args:
-        ydoc:
-            The YDoc object representing the notebook.
-        cell_id:
-            The UUID of the cell to find.
-
-    Returns:
-        The index of the cell in the notebook, or None if not found.
-    """
-    for i, ycell in enumerate(ydoc.ycells):
-        if ycell.get("id") == cell_id:
-            return i
-    return None
-
-
-def _get_cell_index_from_id_nbformat(notebook, cell_id: str) -> Optional[int]:
-    """Get cell index from cell_id using nbformat interface.
-
-    Args:
-        notebook:
-            The nbformat notebook object.
-        cell_id:
-            The UUID of the cell to find.
-
-    Returns:
-        The index of the cell in the notebook, or None if not found.
-    """
-    for i, cell in enumerate(notebook.cells):
-        if hasattr(cell, "id") and cell.id == cell_id:
-            return i
-        elif hasattr(cell, "metadata") and cell.metadata.get("id") == cell_id:
-            return i
-    return None
-
-
-def _determine_insert_index(cells_count: int, cell_index: Optional[int], add_above: bool) -> int:
-    """Determine the index where a new cell should be inserted.
-
-    Args:
-        cells_count:
-            The total number of cells in the notebook.
-        cell_index:
-            The index of the reference cell, or None to append at the end.
-        add_above:
-            If True, insert above the reference cell; if False, insert below.
-
-    Returns:
-        The index where the new cell should be inserted.
-    """
-    if cell_index is None:
-        insert_index = cells_count
-    else:
-        if not (0 <= cell_index < cells_count):
-            cell_index = max(0, min(cell_index, cells_count))
-        insert_index = cell_index if add_above else cell_index + 1
-    return insert_index
 
 
 @lru_cache(maxsize=1)
@@ -1911,7 +617,7 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
 
         notebook["metadata"] = {"kernelspec": spec}
 
-        _write_notebook_file(file_path, notebook)
+        write_notebook_file(file_path, notebook)
 
         opened = await open_file(file_path)
         if not opened.get("success"):
