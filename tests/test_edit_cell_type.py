@@ -19,7 +19,7 @@ def _assume_rtc_available():
     edit_cell to jupyterlab-ai-commands instead; force it True so the tested
     code path runs. (RTC-free behavior is covered by the E2E suite.)
     """
-    with patch("jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=True):
+    with patch("jupyter_ai_tools.adapters.notebook.rtc_available", return_value=True):
         yield
 
 
@@ -45,9 +45,9 @@ def _read_notebook(path):
 def _nbformat_path():
     """Patch get_file_id and get_jupyter_ydoc so edit_cell takes the nbformat path."""
     with (
-        patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock),
+        patch("jupyter_ai_tools.adapters.notebook.get_file_id", new_callable=AsyncMock),
         patch(
-            "jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc",
+            "jupyter_ai_tools.adapters.notebook.get_jupyter_ydoc",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -59,17 +59,17 @@ def _nbformat_path():
 def _ydoc_path(ydoc, resolved_cell_id="cell-1", cell_index=0):
     """Patch dependencies so edit_cell takes the YDoc path with the given mock."""
     with (
-        patch("jupyter_ai_tools.toolkits.notebook.get_file_id", new_callable=AsyncMock),
+        patch("jupyter_ai_tools.adapters.notebook.get_file_id", new_callable=AsyncMock),
         patch(
-            "jupyter_ai_tools.toolkits.notebook.get_jupyter_ydoc",
+            "jupyter_ai_tools.adapters.notebook.get_jupyter_ydoc",
             new_callable=AsyncMock,
             return_value=ydoc,
         ),
         patch(
-            "jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc",
+            "jupyter_ai_tools.adapters.notebook.YDocAdapter._get_cell_index_from_id",
             return_value=cell_index,
         ),
-        patch("jupyter_ai_tools.toolkits.notebook.normalize_filepath", side_effect=lambda x: x),
+        patch("jupyter_ai_tools.adapters.notebook.normalize_filepath", side_effect=lambda x: x),
     ):
         yield
 
@@ -411,7 +411,7 @@ class TestEditCellTypeYdoc:
 
         with (
             _ydoc_path(ydoc),
-            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+            patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._atomic_replace_cell_source") as mock_replace,
         ):
             await edit_cell("test.ipynb", "cell-1", content="new code")
 
@@ -424,7 +424,7 @@ class TestEditCellTypeYdoc:
 
         with (
             _ydoc_path(ydoc),
-            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+            patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._atomic_replace_cell_source") as mock_replace,
         ):
             await edit_cell("test.ipynb", "cell-1", content="updated", cell_type="code")
 
@@ -438,7 +438,7 @@ class TestEditCellTypeYdoc:
 
         with (
             _ydoc_path(ydoc),
-            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+            patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._atomic_replace_cell_source") as mock_replace,
         ):
             await edit_cell("test.ipynb", "cell-1")
 
@@ -464,9 +464,9 @@ class TestEditCellTypeYdoc:
 
         with (
             _ydoc_path(ydoc),
-            patch("jupyter_ai_tools.toolkits.notebook._atomic_replace_cell_source") as mock_replace,
+            patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._atomic_replace_cell_source") as mock_replace,
             patch(
-                "jupyter_ai_tools.toolkits.notebook.write_to_cell_collaboratively",
+                "jupyter_ai_tools.adapters.notebook.YDocAdapter.write_to_cell_collaboratively",
                 new_callable=AsyncMock,
             ) as mock_write,
         ):
@@ -486,7 +486,7 @@ class TestEditCellTypeYdoc:
         with (
             _ydoc_path(ydoc, resolved_cell_id="bad-id"),
             patch(
-                "jupyter_ai_tools.toolkits.notebook._get_cell_index_from_id_ydoc", return_value=None
+                "jupyter_ai_tools.adapters.notebook.YDocAdapter._get_cell_index_from_id", return_value=None
             ),
         ):
             with pytest.raises(ValueError, match="not found"):

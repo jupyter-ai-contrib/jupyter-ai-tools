@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from jupyter_ai_tools.toolkits.notebook import (
-    _atomic_replace_cell_source,
-    _handle_delete_operation,
-    _handle_insert_operation,
-    _handle_replace_operation,
-    _safe_set_cursor,
-    write_to_cell_collaboratively,
-)
+from jupyter_ai_tools.adapters.notebook import YDocAdapter
+
+_handle_delete_operation = YDocAdapter._handle_delete_operation
+_handle_insert_operation = YDocAdapter._handle_insert_operation
+_handle_replace_operation = YDocAdapter._handle_replace_operation
+_safe_set_cursor = YDocAdapter._safe_set_cursor
+write_to_cell_collaboratively = YDocAdapter.write_to_cell_collaboratively
+_atomic_replace_cell_source = YDocAdapter._atomic_replace_cell_source
 
 
 class TestWriteToCellCollaboratively:
@@ -82,8 +82,8 @@ class TestWriteToCellCollaboratively:
             await write_to_cell_collaboratively(self.mock_ynotebook, self.mock_ycell, "new content")
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_replace_operation", new_callable=AsyncMock)
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_replace_operation", new_callable=AsyncMock)
     async def test_animated_replace_opcode_calls_handle_replace(
         self, mock_handle_replace, mock_safe_set_cursor
     ):
@@ -100,8 +100,8 @@ class TestWriteToCellCollaboratively:
         assert mock_safe_set_cursor.call_count >= 2
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.difflib.SequenceMatcher")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.difflib.SequenceMatcher")
     async def test_difflib_error_propagates(self, mock_sequence_matcher, mock_safe_set_cursor):
         """Errors in the animated path propagate — callers decide how to handle them."""
         mock_sequence_matcher.side_effect = Exception("Difflib error")
@@ -110,9 +110,9 @@ class TestWriteToCellCollaboratively:
             await write_to_cell_collaboratively(self.mock_ynotebook, self.mock_ycell, "new content")
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_delete_operation")
-    @patch("jupyter_ai_tools.toolkits.notebook.difflib.SequenceMatcher")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_delete_operation")
+    @patch("jupyter_ai_tools.adapters.notebook.difflib.SequenceMatcher")
     async def test_delete_operation_called(
         self, mock_sequence_matcher, mock_delete_op, mock_safe_set_cursor
     ):
@@ -130,9 +130,9 @@ class TestWriteToCellCollaboratively:
         mock_delete_op.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_insert_operation")
-    @patch("jupyter_ai_tools.toolkits.notebook.difflib.SequenceMatcher")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_insert_operation")
+    @patch("jupyter_ai_tools.adapters.notebook.difflib.SequenceMatcher")
     async def test_insert_operation_called(
         self, mock_sequence_matcher, mock_insert_op, mock_safe_set_cursor
     ):
@@ -150,9 +150,9 @@ class TestWriteToCellCollaboratively:
         mock_insert_op.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_replace_operation")
-    @patch("jupyter_ai_tools.toolkits.notebook.difflib.SequenceMatcher")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_replace_operation")
+    @patch("jupyter_ai_tools.adapters.notebook.difflib.SequenceMatcher")
     async def test_replace_operation_called(
         self, mock_sequence_matcher, mock_replace_op, mock_safe_set_cursor
     ):
@@ -174,8 +174,8 @@ class TestHandleDeleteOperation:
     """Test cases for _handle_delete_operation function."""
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_delete_operation(self, mock_sleep, mock_safe_set_cursor):
         """Test delete operation with proper timing."""
         mock_ynotebook = Mock()
@@ -190,8 +190,8 @@ class TestHandleDeleteOperation:
         mock_old_.__delitem__.assert_called_with(slice(0, 5))
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_delete_operation_with_fast_typing(self, mock_sleep, mock_safe_set_cursor):
         """Test delete operation respects maximum sleep time."""
         mock_ynotebook = Mock()
@@ -208,8 +208,8 @@ class TestHandleInsertOperation:
     """Test cases for _handle_insert_operation function."""
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_insert_whitespace_only(self, mock_sleep, mock_safe_set_cursor):
         """Test insertion of whitespace-only content."""
         mock_ynotebook = Mock()
@@ -229,8 +229,8 @@ class TestHandleInsertOperation:
         mock_safe_set_cursor.assert_called_with(mock_ynotebook, mock_old_, 4)
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_insert_words(self, mock_sleep, mock_safe_set_cursor):
         """Test insertion of words with proper spacing."""
         mock_ynotebook = Mock()
@@ -247,8 +247,8 @@ class TestHandleInsertOperation:
         mock_safe_set_cursor.assert_called()
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._safe_set_cursor")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_insert_with_suffix(self, mock_sleep, mock_safe_set_cursor):
         """Test insertion handles remaining text after last word."""
         mock_ynotebook = Mock()
@@ -266,9 +266,9 @@ class TestHandleReplaceOperation:
     """Test cases for _handle_replace_operation function."""
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_delete_operation")
-    @patch("jupyter_ai_tools.toolkits.notebook._handle_insert_operation")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_delete_operation")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_insert_operation")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_replace_operation(self, mock_sleep, mock_insert_op, mock_delete_op):
         """Test replace operation calls delete then insert."""
         mock_ynotebook = Mock()
@@ -291,7 +291,7 @@ class TestHandleReplaceOperation:
 class TestSafeSetCursor:
     """Test cases for _safe_set_cursor function."""
 
-    @patch("jupyter_ai_tools.toolkits.notebook.set_cursor_in_ynotebook")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter.set_cursor_in_ynotebook")
     def test_safe_set_cursor_success(self, mock_set_cursor):
         """Test successful cursor setting."""
         mock_ynotebook = Mock()
@@ -301,7 +301,7 @@ class TestSafeSetCursor:
 
         mock_set_cursor.assert_called_once_with(mock_ynotebook, mock_old_, 5, None)
 
-    @patch("jupyter_ai_tools.toolkits.notebook.set_cursor_in_ynotebook")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter.set_cursor_in_ynotebook")
     def test_safe_set_cursor_with_stop(self, mock_set_cursor):
         """Test cursor setting with stop position."""
         mock_ynotebook = Mock()
@@ -311,7 +311,7 @@ class TestSafeSetCursor:
 
         mock_set_cursor.assert_called_once_with(mock_ynotebook, mock_old_, 5, 10)
 
-    @patch("jupyter_ai_tools.toolkits.notebook.set_cursor_in_ynotebook")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter.set_cursor_in_ynotebook")
     def test_safe_set_cursor_handles_exception(self, mock_set_cursor):
         """Test that cursor setting exceptions are handled gracefully."""
         mock_set_cursor.side_effect = Exception("Cursor error")
@@ -328,8 +328,8 @@ class TestIntegration:
     """Integration tests for the animated path (animate=True)."""
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook.set_cursor_in_ynotebook")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter.set_cursor_in_ynotebook")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_full_workflow_simple_change(self, mock_sleep, mock_set_cursor):
         """Test a complete workflow with simple text change (animated path)."""
         mock_ynotebook = Mock()
@@ -349,8 +349,8 @@ class TestIntegration:
         mock_source.insert.assert_called()
 
     @pytest.mark.asyncio
-    @patch("jupyter_ai_tools.toolkits.notebook.set_cursor_in_ynotebook")
-    @patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep")
+    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter.set_cursor_in_ynotebook")
+    @patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep")
     async def test_custom_typing_speed(self, mock_sleep, mock_set_cursor):
         """Test that custom typing speed is respected (animated path)."""
         mock_ynotebook = Mock()
@@ -403,7 +403,7 @@ class TestAtomicReplace:
     def test_no_asyncio_sleep_called(self):
         """No event loop yields between CRDT ops — the race condition fix."""
         mock_ycell, _ = self._make_ycell("old")
-        with patch("jupyter_ai_tools.toolkits.notebook.asyncio.sleep") as mock_sleep:
+        with patch("jupyter_ai_tools.adapters.notebook.asyncio.sleep") as mock_sleep:
             _atomic_replace_cell_source(mock_ycell, "new")
         mock_sleep.assert_not_called()
 
