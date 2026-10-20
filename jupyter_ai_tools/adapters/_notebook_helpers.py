@@ -1,7 +1,6 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import nbformat
-
 
 NEW_CELL = {
     "code": nbformat.v4.new_code_cell,
@@ -47,3 +46,45 @@ def determine_insert_index(cells_count: int, cell_index: Optional[int], add_abov
             cell_index = max(0, min(cell_index, cells_count))
         insert_index = cell_index if add_above else cell_index + 1
     return insert_index
+
+
+def clean_text(text) -> Optional[str]:
+    """Clean and format text output."""
+    if text is None:
+        return None
+    if isinstance(text, list):
+        return "".join(str(item) for item in text)
+    return str(text)
+
+
+def process_notebook_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process a Jupyter notebook cell output into a standardized format."""
+    output_type = output_data.get("output_type")
+
+    if output_type == "stream":
+        return {"output_type": output_type, "text": clean_text(output_data.get("text", ""))}
+
+    elif output_type in ["execute_result", "display_data"]:
+        data = output_data.get("data", {})
+        return {
+            "output_type": output_type,
+            "text": clean_text(data.get("text/plain")),
+            "image": extract_image_data(data) if data else None,
+        }
+
+    elif output_type == "error":
+        ename = output_data.get("ename", "")
+        evalue = output_data.get("evalue", "")
+        traceback = "\n".join(output_data.get("traceback", []))
+        error_text = f"{ename}: {evalue}\n{traceback}"
+        return {"output_type": output_type, "text": clean_text(error_text)}
+
+    return output_data
+
+
+def extract_image_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract image data from notebook output data."""
+    for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/svg+xml"]:
+        if mime_type in data:
+            return {"mime_type": mime_type, "data": data[mime_type]}
+    return None

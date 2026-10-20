@@ -1,10 +1,18 @@
 import asyncio
 import difflib
+import json
+import os
+import re
+import weakref
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import unquote
 from uuid import uuid4
 
+import nbformat
 from jupyter_ydoc import YNotebook
+from nbclient import NotebookClient
 from pycrdt import Assoc, Text
 
 from ..utils import (
@@ -12,6 +20,7 @@ from ..utils import (
     get_file_id,
     get_global_awareness,
     get_jupyter_ydoc,
+    get_serverapp,
     no_web_client,
     normalize_filepath,
     rtc_available,
@@ -21,9 +30,66 @@ from ._notebook_helpers import (
     NEW_CELL,
     determine_insert_index,
     get_cell_index_from_id_nbformat,
+    process_notebook_output,
     read_notebook_file,
     write_notebook_file,
 )
+
+# One lock for each notebook, so that its runs and the creation of its session do not
+# overlap. The runs that hold or wait for a lock keep it alive.
+_notebook_locks: "weakref.WeakValueDictionary[str, asyncio.Lock]" = weakref.WeakValueDictionary()
+
+_MAX_OUTPUT_TEXT = 10000
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+# The frontend commands get the same limit from jupyterlab-commands-toolkit.
+_MAX_TIMEOUT = 10.0
+
+_background_tasks: Set[asyncio.Task] = set()
+
+
+def _finish_background_task(task: asyncio.Task) -> None:
+    _background_tasks.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        get_serverapp().log.error("A tool call failed after its timeout", exc_info=task.exception())
+
+
+async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) -> dict:
+    """Run a coroutine with an optional timeout.
+
+    If timeout is exceeded, the task continues in the background.
+    """
+    task = asyncio.create_task(coro)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    except asyncio.TimeoutError:
+        # Keep a reference to the task, and log its error, as nothing awaits it now.
+        _background_tasks.add(task)
+        task.add_done_callback(_finish_background_task)
+        return {
+            "status": "timed_out",
+            "message": f"{started_msg}, timed out after {timeout}s of waiting",
+        }
+
+
+async def _read_notebook_to_run(file_path: str):
+    """
+    Read the current content of a notebook, from the YDoc when an RTC room holds it.
+
+    Until the room saves the YDoc, the file on disk has older content.
+    """
+    content = None
+    if rtc_available():
+        ydoc = await get_jupyter_ydoc(await get_file_id(file_path))
+        if ydoc is not None:
+            content = ydoc.get()
+    if content is None:
+        import json as _json
+
+        normalized = normalize_filepath(file_path)
+        with open(normalized, "r", encoding="utf-8") as f:
+            content = _json.load(f)
+    return nbformat.reads(json.dumps(content), as_version=nbformat.NO_CONVERT)
 
 
 class BaseAdapter(ABC):
@@ -77,6 +143,24 @@ class BaseAdapter(ABC):
     @abstractmethod
     async def select_cell(
         self, cell_id: str, username: Optional[str], file_path: Optional[str]
+    ) -> dict: ...
+
+    @abstractmethod
+    async def run_cell(
+        self,
+        cell_id: str,
+        file_path: Optional[str],
+        username: Optional[str],
+        timeout: Optional[float],
+        write_outputs: bool,
+    ) -> dict: ...
+
+    @abstractmethod
+    async def run_all_cells(
+        self,
+        file_path: Optional[str],
+        timeout: Optional[float],
+        write_outputs: bool,
     ) -> dict: ...
 
 
@@ -216,6 +300,214 @@ class DiskAdapter(BaseAdapter):
     async def select_cell(self, cell_id, username, file_path):
         raise RuntimeError("Cannot select cell: notebook is not open in JupyterLab")
 
+    @staticmethod
+    def _notebook_lock(path: str) -> asyncio.Lock:
+        lock = _notebook_locks.get(path)
+        if lock is None:
+            lock = _notebook_locks[path] = asyncio.Lock()
+        return lock
+
+    @staticmethod
+    def _session_path(file_path: str) -> str:
+        """
+        Return the path of a notebook relative to the server root, as the sessions store it.
+
+        The symlinks stay, as in the session paths of JupyterLab.
+        """
+        root_dir = get_serverapp().root_dir
+        for root in (root_dir, os.path.realpath(root_dir)):
+            path = os.path.relpath(os.path.join(root, unquote(file_path)), root)
+            if path != os.pardir and not path.startswith(os.pardir + os.sep):
+                return Path(path).as_posix()
+        raise ValueError(f"{file_path=} is not in the root directory of the server: {root_dir}")
+
+    @staticmethod
+    async def _get_notebook_kernel(path: str, notebook):
+        """
+        Return the kernel manager of the notebook session, and start a session if there is none.
+
+        JupyterLab connects to the same session when it opens the notebook.
+        """
+        from tornado import web
+
+        serverapp = get_serverapp()
+        try:
+            session = await serverapp.session_manager.get_session(path=path)
+        # jupyter_server < 1.13.2 raises a KeyError when the kernel of the session was culled.
+        except (web.HTTPError, KeyError):
+            session = await serverapp.session_manager.create_session(
+                path=path,
+                name=os.path.basename(path),
+                type="notebook",
+                kernel_name=notebook.metadata.get("kernelspec", {}).get("name") or None,
+            )
+        return serverapp.kernel_manager.get_kernel(session["kernel"]["id"])
+
+    @staticmethod
+    def _write_cell_outputs(file_path: str, cell_index: int, cell) -> None:
+        """
+        Write the outputs and execution count of a cell to the notebook file on disk.
+
+        The file is read again, as other tools can edit it while the cell runs.
+        A cell without an id (nbformat < 4.5) is found by its index.
+        """
+        notebook = read_notebook_file(file_path)
+        index = get_cell_index_from_id_nbformat(notebook, cell.id) if "id" in cell else cell_index
+        if index is None or index >= len(notebook.cells) or notebook.cells[index].cell_type != "code":
+            return
+        notebook.cells[index].outputs = cell.outputs
+        notebook.cells[index].execution_count = cell.execution_count
+        write_notebook_file(file_path, notebook)
+
+    @staticmethod
+    def _summarize_outputs(outputs, budget: int) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Process outputs for a tool result, and return them with the remaining text budget.
+
+        The result has no image data and no ANSI codes, and its text stops at the budget.
+        """
+        summaries = []
+        for output in outputs:
+            summary = dict(process_notebook_output(output))
+            if summary.get("image"):
+                summary["image"] = {"mime_type": summary["image"]["mime_type"]}
+            if summary.get("text"):
+                text = _ANSI_ESCAPE.sub("", summary["text"])
+                if len(text) > budget:
+                    text = text[:budget] + "\n[Output truncated]"
+                budget = max(budget - len(text), 0)
+                summary["text"] = text
+            summaries.append(summary)
+        return summaries, budget
+
+    @staticmethod
+    async def _until_kernel_restart(km, coro):
+        """
+        Await a coroutine that waits for kernel replies, and stop it if the kernel restarts,
+        as the replies then never come. nbclient already stops when the kernel dies.
+        """
+        # A restart keeps the provisioner, but replaces its process.
+        process = getattr(getattr(km, "provisioner", None), "process", None)
+        task = asyncio.ensure_future(coro)
+        try:
+            while not task.done():
+                await asyncio.wait({task}, timeout=1)
+                restarted = getattr(getattr(km, "provisioner", None), "process", None) is not process
+                if not task.done() and restarted:
+                    raise RuntimeError("The kernel restarted during the run")
+            return task.result()
+        finally:
+            task.cancel()
+
+    @staticmethod
+    async def _execute_cells(
+        client: NotebookClient, cell_indices: List[int], file_path: str, write_outputs: bool
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute cells with an nbclient client, and stop at the first cell with an error.
+        """
+        results: List[Dict[str, Any]] = []
+        budget = _MAX_OUTPUT_TEXT
+        for cell_index in cell_indices:
+            cell = client.nb.cells[cell_index]
+            result: Dict[str, Any] = {"cellId": cell.get("id"), "status": "no-op"}
+            results.append(result)
+            if cell.cell_type != "code":
+                continue
+            if cell.source.strip():
+                await client.async_execute_cell(cell, cell_index)
+                result["status"] = "ok"
+            else:
+                # As in JupyterLab, an empty cell does not run, and loses its outputs.
+                cell.outputs = []
+                cell.execution_count = None
+            if write_outputs:
+                DiskAdapter._write_cell_outputs(file_path, cell_index, cell)
+            outputs, budget = DiskAdapter._summarize_outputs(cell.outputs, budget)
+            result.update(executionCount=cell.execution_count, outputs=outputs)
+            error = next((o for o in cell.outputs if o.output_type == "error"), None)
+            if error is not None:
+                result.update(status="error", errorName=error.ename, errorValue=error.evalue)
+                break
+        return results
+
+    async def _run_cells_impl(
+        self, file_path: str, cell_id: Optional[str] = None, write_outputs: bool = True
+    ) -> dict:
+        """
+        Run a cell, or all the code cells, of a notebook in the kernel of its session.
+
+        With write_outputs, the outputs go to the notebook file after each cell. Without it,
+        the notebook does not change. The result has the outputs, with a limit on their size.
+        The run stops at the first cell with an error, as in JupyterLab.
+        """
+        path = self._session_path(file_path)
+        async with self._notebook_lock(path):
+            notebook = await _read_notebook_to_run(file_path)
+            if cell_id is None:
+                cell_indices = [
+                    i for i, cell in enumerate(notebook.cells) if cell.cell_type == "code"
+                ]
+            else:
+                cell_index = get_cell_index_from_id_nbformat(notebook, cell_id)
+                if cell_index is None:
+                    raise ValueError(
+                        f"Cell with {cell_id=} not found in notebook at {file_path=}"
+                    )
+                cell_indices = [cell_index]
+
+            km = await self._get_notebook_kernel(path, notebook)
+            # Not km.client(): it shares the session of the manager, so its socket identity is
+            # the same as other clients, and the kernel can send the replies to the wrong one.
+            kc = km.client_factory(parent=km)
+            kc.load_connection_info(km.get_connection_info())
+            # JupyterLab also runs the cells with the skip-execution tag.
+            client = NotebookClient(notebook, km=km, allow_errors=True, skip_cells_with_tag="")
+            client.kc = kc
+            try:
+                # Without stdin, input() fails at once, as no one can reply to it.
+                kc.start_channels(stdin=False, hb=False, control=False)
+                await kc.wait_for_ready(timeout=None)
+                cells = await self._until_kernel_restart(
+                    km,
+                    self._execute_cells(
+                        client, cell_indices, normalize_filepath(file_path), write_outputs
+                    ),
+                )
+            finally:
+                kc.stop_channels()
+
+        if write_outputs:
+            message = (
+                "Ran in the kernel of the notebook on the server, as the notebook is not open "
+                "in JupyterLab. The outputs are in the notebook file on disk."
+            )
+        else:
+            message = (
+                "Ran in the kernel of the notebook on the server. The notebook did not change."
+            )
+        if cell_id is not None:
+            return {"success": True, "result": {"message": message, **cells[0]}}
+        # The run stops at the first error, so only the last cell can have one.
+        status = "error" if cells and cells[-1]["status"] == "error" else "ok"
+        return {"success": True, "result": {"message": message, "status": status, "cells": cells}}
+
+    async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
+        timeout = _MAX_TIMEOUT if timeout is None else min(timeout, _MAX_TIMEOUT)
+        return await _run_with_timeout(
+            self._run_cells_impl(file_path, cell_id, write_outputs),
+            timeout,
+            "Cell execution started",
+        )
+
+    async def run_all_cells(self, file_path, timeout, write_outputs):
+        timeout = _MAX_TIMEOUT if timeout is None else min(timeout, _MAX_TIMEOUT)
+        return await _run_with_timeout(
+            self._run_cells_impl(file_path, None, write_outputs),
+            timeout,
+            "Run all cells started",
+        )
+
 
 class FrontendAdapter(BaseAdapter):
     """Drives the JupyterLab frontend via jupyterlab-ai-commands.
@@ -350,6 +642,44 @@ class FrontendAdapter(BaseAdapter):
         for _ in range(abs(distance)):
             move_result = await execute_command(cmd)
         return move_result
+
+    async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
+        if not write_outputs:
+            if not file_path:
+                raise ValueError("file_path is required when write_outputs is False")
+            return await self._disk.run_cell(cell_id, file_path, username, timeout, write_outputs)
+        # RTC-free: jupyterlab-ai-commands run-cell targets the cell by id and
+        # opens the notebook itself, so no awareness-based select is needed.
+        result = await _run_with_timeout(
+            run_lab_command(
+                "jupyterlab-ai-commands:run-cell",
+                {"notebookPath": file_path, "cellId": cell_id},
+            ),
+            timeout,
+            "Cell execution started",
+        )
+        if file_path and no_web_client(result):
+            return await self._disk.run_cell(cell_id, file_path, username, timeout, True)
+        return result
+
+    async def run_all_cells(self, file_path, timeout, write_outputs):
+        from jupyterlab_commands_toolkit.tools import execute_command
+
+        from ..toolkits.jupyterlab import open_file
+
+        if not write_outputs:
+            if not file_path:
+                raise ValueError("file_path is required when write_outputs is False")
+            return await self._disk.run_all_cells(file_path, timeout, write_outputs)
+        if file_path:
+            result = await open_file(file_path)
+            if no_web_client(result):
+                return await self._disk.run_all_cells(file_path, timeout, True)
+            if not result.get("success"):
+                return result
+        return await _run_with_timeout(
+            execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
+        )
 
 
 class YDocAdapter(BaseAdapter):
@@ -565,6 +895,41 @@ class YDocAdapter(BaseAdapter):
             for _ in range(abs(distance)):
                 result = await execute_command("notebook:move-cursor-up")
         return result
+
+    async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
+        from jupyterlab_commands_toolkit.tools import execute_command
+
+        from ..toolkits.jupyterlab import open_file
+
+        if not write_outputs:
+            if not file_path:
+                raise ValueError("file_path is required when write_outputs is False")
+            return await self._disk.run_cell(cell_id, file_path, username, timeout, write_outputs)
+        if file_path:
+            result = await open_file(file_path)
+            if not result.get("success"):
+                return result
+        await self.select_cell(cell_id, username, file_path=file_path)
+        return await _run_with_timeout(
+            execute_command("notebook:run-cell"), timeout, "Cell execution started"
+        )
+
+    async def run_all_cells(self, file_path, timeout, write_outputs):
+        from jupyterlab_commands_toolkit.tools import execute_command
+
+        from ..toolkits.jupyterlab import open_file
+
+        if not write_outputs:
+            if not file_path:
+                raise ValueError("file_path is required when write_outputs is False")
+            return await self._disk.run_all_cells(file_path, timeout, write_outputs)
+        if file_path:
+            result = await open_file(file_path)
+            if not result.get("success"):
+                return result
+        return await _run_with_timeout(
+            execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
+        )
 
     @staticmethod
     def get_cursor_details(
