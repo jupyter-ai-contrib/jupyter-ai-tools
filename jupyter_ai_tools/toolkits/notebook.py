@@ -149,8 +149,8 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
     Returns:
         A dictionary containing the complete notebook structure.
     """
-    accessor = await get_adapter(file_path)
-    return await accessor.read(file_path)
+    adapter = await get_adapter(file_path)
+    return await adapter.read(file_path)
 
 
 async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) -> str:
@@ -396,8 +396,8 @@ async def add_cell(
     Returns:
         None
     """
-    accessor = await get_adapter(file_path)
-    return await accessor.add_cell(file_path, content, cell_id, add_above, cell_type, animate)
+    adapter = await get_adapter(file_path)
+    return await adapter.add_cell(file_path, content, cell_id, add_above, cell_type, animate)
 
 
 async def insert_cell(
@@ -418,8 +418,8 @@ async def insert_cell(
     Returns:
         None
     """
-    accessor = await get_adapter(file_path)
-    return await accessor.insert_cell(file_path, content, insert_index, cell_type, animate)
+    adapter = await get_adapter(file_path)
+    return await adapter.insert_cell(file_path, content, insert_index, cell_type, animate)
 
 
 async def delete_cell(file_path: str, cell_id: str):
@@ -432,8 +432,8 @@ async def delete_cell(file_path: str, cell_id: str):
     Returns:
         None
     """
-    accessor = await get_adapter(file_path)
-    return await accessor.delete_cell(file_path, cell_id)
+    adapter = await get_adapter(file_path)
+    return await adapter.delete_cell(file_path, cell_id)
 
 
 async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
@@ -446,8 +446,8 @@ async def get_active_notebook(username: Optional[str] = None) -> Optional[str]:
         File path for the first active notebook. If username is provided, then
         returns the active notebook for that specific user.
     """
-    accessor = await get_adapter()
-    return await accessor.get_active_notebook(username)
+    adapter = await get_adapter()
+    return await adapter.get_active_notebook(username)
 
 
 async def get_active_cell_id(notebook_path: str, username: Optional[str] = None) -> Optional[str]:
@@ -463,8 +463,8 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
     Returns:
         The active cell ID for the notebook, or None if no active cell found
     """
-    accessor = await get_adapter(notebook_path)
-    return await accessor.get_active_cell_id(notebook_path, username)
+    adapter = await get_adapter(notebook_path)
+    return await adapter.get_active_cell_id(notebook_path, username)
 
 
 async def select_cell(
@@ -488,8 +488,8 @@ async def select_cell(
     target_path = file_path or await get_active_notebook(username)
     if not target_path:
         raise RuntimeError("No active notebook found. Please open a notebook first.")
-    accessor = await get_adapter(target_path)
-    return await accessor.select_cell(cell_id, username, target_path)
+    adapter = await get_adapter(target_path)
+    return await adapter.select_cell(cell_id, username, target_path)
 
 
 async def edit_cell(
@@ -517,8 +517,8 @@ async def edit_cell(
     Raises:
         ValueError: If the cell_id is not found in the notebook.
     """
-    accessor = await get_adapter(file_path)
-    return await accessor.edit_cell(file_path, cell_id, content, cell_type, animate)
+    adapter = await get_adapter(file_path)
+    return await adapter.edit_cell(file_path, cell_id, content, cell_type, animate)
 
 
 # Note: This is currently failing with server outputs, use `read_cell` instead
