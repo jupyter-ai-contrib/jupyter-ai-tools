@@ -710,8 +710,6 @@ class YDocAdapter(BaseAdapter):
 
     def __init__(self, file_path: Optional[str]):
         self._file_path = file_path
-        self._ydoc = None
-        self._loaded = False
 
     @staticmethod
     def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
@@ -761,20 +759,18 @@ class YDocAdapter(BaseAdapter):
                 return active_cell_id
         return None
 
-    async def _load_ydoc(self):
-        if not self._loaded:
-            if self._file_path is None:
-                return None
-            file_id = await get_file_id(self._file_path)
-            self._ydoc = await get_jupyter_ydoc(file_id)
-            self._loaded = True
-        return self._ydoc
+    async def _load_ydoc(self, file_path: Optional[str] = None) -> Optional[YNotebook]:
+        resolved = normalize_filepath(file_path) if file_path else self._file_path
+        if resolved is None:
+            return None
+        file_id = await get_file_id(resolved)
+        return await get_jupyter_ydoc(file_id)
 
     async def read(self, file_path: str) -> dict:
         return await self._disk.read(file_path)
 
     async def add_cell(self, file_path, content, cell_id, add_above, cell_type, animate=False):
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         if ydoc is None:
             return await self._disk.add_cell(file_path, content, cell_id, add_above, cell_type)
         cells_count = ydoc.cell_number
@@ -799,7 +795,7 @@ class YDocAdapter(BaseAdapter):
         return None
 
     async def insert_cell(self, file_path, content, insert_index, cell_type, animate=False):
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         if ydoc is None:
             return await self._disk.insert_cell(file_path, content, insert_index, cell_type)
         cells_count = ydoc.cell_number
@@ -822,7 +818,7 @@ class YDocAdapter(BaseAdapter):
         return None
 
     async def delete_cell(self, file_path, cell_id):
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         if ydoc is None:
             return await self._disk.delete_cell(file_path, cell_id)
         cell_index = self._get_cell_index_from_id(ydoc, cell_id)
@@ -832,7 +828,7 @@ class YDocAdapter(BaseAdapter):
         return {"success": True}
 
     async def edit_cell(self, file_path, cell_id, content, cell_type, animate=False):
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         if ydoc is None:
             return await self._disk.edit_cell(file_path, cell_id, content, cell_type)
         cell_index = self._get_cell_index_from_id(ydoc, cell_id)
@@ -866,7 +862,7 @@ class YDocAdapter(BaseAdapter):
         return {"success": True}
 
     async def get_active_cell_id(self, file_path, username):
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         return self._get_active_cell_id(ydoc, username)
 
     async def get_active_notebook(self, username):
@@ -888,7 +884,7 @@ class YDocAdapter(BaseAdapter):
     async def select_cell(self, cell_id, username, file_path):
         from jupyterlab_commands_toolkit.tools import execute_command
 
-        ydoc = await self._load_ydoc()
+        ydoc = await self._load_ydoc(file_path)
         if not ydoc:
             raise RuntimeError(f"Notebook at {file_path} is not currently open")
         target_cell_index = self._get_cell_index_from_id(ydoc, cell_id)
@@ -913,9 +909,11 @@ class YDocAdapter(BaseAdapter):
         return result
 
     async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
+        if not file_path and username:
+            file_path = await self.get_active_notebook(username)
+        if not file_path:
+            raise RuntimeError("No active notebook found. Please open a notebook first.")
         if not write_outputs:
-            if not file_path:
-                raise ValueError("file_path is required when write_outputs is False")
             return await self._disk.run_cell(cell_id, file_path, username, timeout, write_outputs)
         result = await _run_with_timeout(
             run_lab_command(
@@ -925,7 +923,7 @@ class YDocAdapter(BaseAdapter):
             timeout,
             "Cell execution started",
         )
-        if file_path and no_web_client(result):
+        if no_web_client(result):
             return await self._disk.run_cell(cell_id, file_path, username, timeout, True)
         return result
 
@@ -942,9 +940,12 @@ class YDocAdapter(BaseAdapter):
             result = await open_file(file_path)
             if not result.get("success"):
                 return result
-        return await _run_with_timeout(
+        result = await _run_with_timeout(
             execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
         )
+        if file_path and no_web_client(result):
+            return await self._disk.run_all_cells(file_path, timeout, True)
+        return result
 
     @staticmethod
     def get_cursor_details(
