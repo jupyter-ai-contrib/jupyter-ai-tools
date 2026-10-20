@@ -74,9 +74,12 @@ async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) ->
 
 async def _read_notebook_to_run(file_path: str):
     """
-    Read the current content of a notebook, from the YDoc when an RTC room holds it.
+    Read the current content of a notebook, preferring live state over disk.
 
-    Until the room saves the YDoc, the file on disk has older content.
+    With RTC: reads from the YDoc (the YDoc may be ahead of the file on disk
+    when the room has not autosaved yet).
+    Without RTC: reads from the JupyterLab frontend model (which may have
+    unsaved edits), falling back to disk when no browser is connected.
     """
     content = None
     if rtc_available():
@@ -84,11 +87,7 @@ async def _read_notebook_to_run(file_path: str):
         if ydoc is not None:
             content = ydoc.get()
     if content is None:
-        import json as _json
-
-        normalized = normalize_filepath(file_path)
-        with open(normalized, "r", encoding="utf-8") as f:
-            content = _json.load(f)
+        content = await FrontendAdapter().read(file_path)
     return nbformat.reads(json.dumps(content), as_version=nbformat.NO_CONVERT)
 
 
@@ -910,22 +909,21 @@ class YDocAdapter(BaseAdapter):
         return result
 
     async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
-        from jupyterlab_commands_toolkit.tools import execute_command
-
-        from ..toolkits.jupyterlab import open_file
-
         if not write_outputs:
             if not file_path:
                 raise ValueError("file_path is required when write_outputs is False")
             return await self._disk.run_cell(cell_id, file_path, username, timeout, write_outputs)
-        if file_path:
-            result = await open_file(file_path)
-            if not result.get("success"):
-                return result
-        await self.select_cell(cell_id, username, file_path=file_path)
-        return await _run_with_timeout(
-            execute_command("notebook:run-cell"), timeout, "Cell execution started"
+        result = await _run_with_timeout(
+            run_lab_command(
+                "jupyterlab-ai-commands:run-cell",
+                {"notebookPath": file_path, "cellId": cell_id},
+            ),
+            timeout,
+            "Cell execution started",
         )
+        if file_path and no_web_client(result):
+            return await self._disk.run_cell(cell_id, file_path, username, timeout, True)
+        return result
 
     async def run_all_cells(self, file_path, timeout, write_outputs):
         from jupyterlab_commands_toolkit.tools import execute_command
