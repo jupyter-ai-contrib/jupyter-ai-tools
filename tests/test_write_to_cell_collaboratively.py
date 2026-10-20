@@ -83,7 +83,10 @@ class TestWriteToCellCollaboratively:
 
     @pytest.mark.asyncio
     @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._safe_set_cursor")
-    @patch("jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_replace_operation", new_callable=AsyncMock)
+    @patch(
+        "jupyter_ai_tools.adapters.notebook.YDocAdapter._handle_replace_operation",
+        new_callable=AsyncMock,
+    )
     async def test_animated_replace_opcode_calls_handle_replace(
         self, mock_handle_replace, mock_safe_set_cursor
     ):

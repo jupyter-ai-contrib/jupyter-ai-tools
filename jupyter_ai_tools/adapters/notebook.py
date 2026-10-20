@@ -352,7 +352,11 @@ class DiskAdapter(BaseAdapter):
         """
         notebook = read_notebook_file(file_path)
         index = get_cell_index_from_id_nbformat(notebook, cell.id) if "id" in cell else cell_index
-        if index is None or index >= len(notebook.cells) or notebook.cells[index].cell_type != "code":
+        if (
+            index is None
+            or index >= len(notebook.cells)
+            or notebook.cells[index].cell_type != "code"
+        ):
             return
         notebook.cells[index].outputs = cell.outputs
         notebook.cells[index].execution_count = cell.execution_count
@@ -391,7 +395,9 @@ class DiskAdapter(BaseAdapter):
         try:
             while not task.done():
                 await asyncio.wait({task}, timeout=1)
-                restarted = getattr(getattr(km, "provisioner", None), "process", None) is not process
+                restarted = (
+                    getattr(getattr(km, "provisioner", None), "process", None) is not process
+                )
                 if not task.done() and restarted:
                     raise RuntimeError("The kernel restarted during the run")
             return task.result()
@@ -450,9 +456,7 @@ class DiskAdapter(BaseAdapter):
             else:
                 cell_index = get_cell_index_from_id_nbformat(notebook, cell_id)
                 if cell_index is None:
-                    raise ValueError(
-                        f"Cell with {cell_id=} not found in notebook at {file_path=}"
-                    )
+                    raise ValueError(f"Cell with {cell_id=} not found in notebook at {file_path=}")
                 cell_indices = [cell_index]
 
             km = await self._get_notebook_kernel(path, notebook)
@@ -965,7 +969,9 @@ class YDocAdapter(BaseAdapter):
     ) -> None:
         """Sets the cursor position in a collaborative notebook environment."""
         try:
-            details = YDocAdapter.get_cursor_details(cell_source, start_index, stop_index=stop_index)
+            details = YDocAdapter.get_cursor_details(
+                cell_source, start_index, stop_index=stop_index
+            )
             if ynotebook.awareness:
                 ynotebook.awareness.set_local_state_field("cursors", [details])
         except Exception:
@@ -973,11 +979,16 @@ class YDocAdapter(BaseAdapter):
 
     @staticmethod
     def _safe_set_cursor(
-        ynotebook: YNotebook, cell_source: Text, cursor_position: int, stop_cursor: Optional[int] = None
+        ynotebook: YNotebook,
+        cell_source: Text,
+        cursor_position: int,
+        stop_cursor: Optional[int] = None,
     ) -> None:
         """Safely set cursor position with error handling."""
         try:
-            YDocAdapter.set_cursor_in_ynotebook(ynotebook, cell_source, cursor_position, stop_cursor)
+            YDocAdapter.set_cursor_in_ynotebook(
+                ynotebook, cell_source, cursor_position, stop_cursor
+            )
         except Exception:
             pass
 
@@ -986,7 +997,9 @@ class YDocAdapter(BaseAdapter):
         ynotebook, cell_source, cursor_position: int, delete_length: int, typing_speed: float
     ) -> None:
         """Handle deletion of text chunks with visual feedback."""
-        YDocAdapter._safe_set_cursor(ynotebook, cell_source, cursor_position, cursor_position + delete_length)
+        YDocAdapter._safe_set_cursor(
+            ynotebook, cell_source, cursor_position, cursor_position + delete_length
+        )
         await asyncio.sleep(min(0.3, typing_speed * 3))
         del cell_source[cursor_position : cursor_position + delete_length]
         await asyncio.sleep(typing_speed)

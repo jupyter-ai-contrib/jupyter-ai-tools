@@ -1,6 +1,5 @@
-import asyncio
 import os
-from typing import Optional, Set
+from typing import Optional
 
 from jupyterlab_commands_toolkit.tools import execute_command
 
@@ -8,16 +7,6 @@ from ..adapters.notebook import get_adapter
 from ..utils import get_serverapp
 
 __all__ = ["open_file", "run_cell", "run_all_cells"]
-
-_MAX_TIMEOUT = 10.0
-
-_background_tasks: Set[asyncio.Task] = set()
-
-
-def _finish_background_task(task: asyncio.Task) -> None:
-    _background_tasks.discard(task)
-    if not task.cancelled() and task.exception() is not None:
-        get_serverapp().log.error("A tool call failed after its timeout", exc_info=task.exception())
 
 
 async def open_file(file_path: str):
