@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@jupyterlab/galata": "^5.0.0",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@playwright/test": "^1.37.0"
   }
 }
