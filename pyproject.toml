@@ -70,6 +70,7 @@ path = "jupyter_ai_tools/__init__.py"
 "jupyter-config" = "etc/jupyter"
 
 [tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
   "error",
   "ignore:There is no current event loop:DeprecationWarning",
