@@ -442,28 +442,29 @@ async def read_cell_image(
 
 
 async def get_cell_id_from_index(file_path: str, cell_index: int) -> str:
-    """Finds the cell_id of the cell at a specific cell index.
+    """Find the cell ID for a one-based cell number.
 
     This function reads a Jupyter notebook file and returns the UUID of the cell
-    at the specified index position.
+    at the specified cell number shown in the JupyterLab interface.
 
     Args:
         file_path:
             The relative path to the notebook file on the filesystem.
         cell_index:
-            The index of the cell to find the ID for.
+            The one-based cell number shown in the JupyterLab interface.
 
     Returns:
-        The UUID of the cell at the specified index, or None if the index is out of range
-        or if the cell does not have an ID.
+        The UUID of the cell at the specified cell number, or None if the number is out
+        of range or if the cell does not have an ID.
     """
     try:
         cell_id = None
         notebook_json = await read_notebook_json(file_path)
         cells = notebook_json["cells"]
 
-        if 0 <= cell_index < len(cells):
-            cell_id = cells[cell_index].get("id")
+        zero_based_index = cell_index - 1
+        if 0 <= zero_based_index < len(cells):
+            cell_id = cells[zero_based_index].get("id")
         else:
             cell_id = None
 
