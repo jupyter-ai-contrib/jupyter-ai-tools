@@ -542,7 +542,7 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.add_cell(file_path, content, cell_id, add_above, cell_type)
-        return self._save_notebook(file_path, result)
+        return await self._save_notebook(file_path, result)
 
     async def insert_cell(self, file_path, content, insert_index, cell_type, animate=False):
         info = await run_lab_command(
@@ -572,7 +572,7 @@ class FrontendAdapter(BaseAdapter):
                 "position": position,
             },
         )
-        return self._save_notebook(file_path, result)
+        return await self._save_notebook(file_path, result)
 
     async def delete_cell(self, file_path, cell_id):
         result = await run_lab_command(
@@ -581,7 +581,7 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.delete_cell(file_path, cell_id)
-        return self._save_notebook(file_path, result)
+        return await self._save_notebook(file_path, result)
 
     async def edit_cell(self, file_path, cell_id, content, cell_type, animate=False):
         result: dict = {"success": True}
@@ -607,7 +607,7 @@ class FrontendAdapter(BaseAdapter):
         if no_web_client(result):
             return await self._disk.edit_cell(file_path, cell_id, content, cell_type)
 
-        return self._save_notebook(file_path, result)
+        return await self._save_notebook(file_path, result)
 
     async def get_active_cell_id(self, file_path, username):
         resp = await run_lab_command(
@@ -686,7 +686,7 @@ class FrontendAdapter(BaseAdapter):
             execute_command("notebook:run-all-cells"), timeout, "Run all cells started"
         )
 
-    async def _save_notebook(file_path: str, result: dict) -> dict:
+    async def _save_notebook(self, file_path: str, result: dict) -> dict:
         """
         Save the notebook in the JupyterLab web client after an edit there.
         """
