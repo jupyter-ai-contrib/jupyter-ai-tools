@@ -278,7 +278,7 @@ async def read_cell(file_path: str, cell_id: str, include_outputs: bool = True) 
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
         cell, cell_index = await read_cell_json(file_path, resolved_cell_id)
-        cell_md = cell_to_md(cell, cell_index)
+        cell_md = cell_to_md(cell, cell_index, include_outputs=include_outputs)
         return cell_md
     except Exception:
         raise
