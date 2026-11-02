@@ -1,6 +1,6 @@
 import { test, expect } from './base';
 import { callTool } from './mcp-client';
-import { buildNotebook } from './fixtures';
+import { buildNotebook, readCellsOnDisk } from './fixtures';
 
 // add_cell: add a cell above/below a reference cell (YDoc-backed). Verified via
 // the browser notebook model. On the RTC-free default leg this errors.
@@ -30,5 +30,19 @@ test.describe('add_cell', () => {
     });
     expect(res.isError, res.text).toBe(false);
     await expect.poll(async () => page.notebook.getCellCount()).toBe(4);
+  });
+
+  test('saves the new cell to disk', async ({ page, tmpPath, mcp }) => {
+    const { path } = await buildNotebook(page, tmpPath);
+    const res = await callTool(mcp, 'add_cell', {
+      file_path: path,
+      content: 'saved = True'
+    });
+    expect(res.isError, res.text).toBe(false);
+    await expect
+      .poll(async () =>
+        (await readCellsOnDisk(page, path)).map((cell: any) => cell.source)
+      )
+      .toContain('saved = True');
   });
 });

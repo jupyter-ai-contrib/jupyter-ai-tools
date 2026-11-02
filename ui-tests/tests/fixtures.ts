@@ -57,3 +57,15 @@ export async function buildNotebook(
 
   return { path, cellIds };
 }
+
+/**
+ * Read the cells of a notebook from disk through the contents API.
+ */
+export async function readCellsOnDisk(
+  page: IJupyterLabPageFixture,
+  path: string
+): Promise<any[]> {
+  const response = await page.request.get(`/api/contents/${path}?content=1`);
+  const model = await response.json();
+  return model.content.cells;
+}
