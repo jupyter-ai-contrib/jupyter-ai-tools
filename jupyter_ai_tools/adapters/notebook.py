@@ -542,7 +542,9 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.add_cell(file_path, content, cell_id, add_above, cell_type)
-        return await self._save_notebook(file_path, result)
+        if result.get("success"):
+            return await self._save_notebook(file_path, result)
+        return result
 
     async def insert_cell(self, file_path, content, insert_index, cell_type, animate=False):
         info = await run_lab_command(
@@ -572,7 +574,9 @@ class FrontendAdapter(BaseAdapter):
                 "position": position,
             },
         )
-        return await self._save_notebook(file_path, result)
+        if result.get("success"):
+            return await self._save_notebook(file_path, result)
+        return result
 
     async def delete_cell(self, file_path, cell_id):
         result = await run_lab_command(
@@ -581,33 +585,43 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.delete_cell(file_path, cell_id)
-        return await self._save_notebook(file_path, result)
+        if result.get("success"):
+            return await self._save_notebook(file_path, result)
+        return result
 
     async def edit_cell(self, file_path, cell_id, content, cell_type, animate=False):
+        if content is None and cell_type is None:
+            return {"success": True}
         result: dict = {"success": True}
-        if content is not None:
-            result = await run_lab_command(
-                "jupyterlab-ai-commands:set-cell-content",
-                {
-                    "notebookPath": file_path,
-                    "cellId": cell_id,
-                    "content": content,
-                    "showDiff": False,
-                },
-            )
-        if cell_type is not None and result.get("success"):
-            result = await self.select_cell(cell_id, None, file_path)
-            if result.get("success"):
-                type_command = {
-                    "code": "notebook:change-cell-to-code",
-                    "markdown": "notebook:change-cell-to-markdown",
-                    "raw": "notebook:change-cell-to-raw",
-                }[cell_type]
-                result = await run_lab_command(type_command)
+        edited = False
+        try:
+            if content is not None:
+                result = await run_lab_command(
+                    "jupyterlab-ai-commands:set-cell-content",
+                    {
+                        "notebookPath": file_path,
+                        "cellId": cell_id,
+                        "content": content,
+                        "showDiff": False,
+                    },
+                )
+                edited = bool(result.get("success"))
+            if cell_type is not None and result.get("success"):
+                result = await self.select_cell(cell_id, None, file_path)
+                if result.get("success"):
+                    type_command = {
+                        "code": "notebook:change-cell-to-code",
+                        "markdown": "notebook:change-cell-to-markdown",
+                        "raw": "notebook:change-cell-to-raw",
+                    }[cell_type]
+                    result = await run_lab_command(type_command)
+                    edited = edited or bool(result.get("success"))
+        finally:
+            if edited:
+                result = await self._save_notebook(file_path, result)
         if no_web_client(result):
             return await self._disk.edit_cell(file_path, cell_id, content, cell_type)
-
-        return await self._save_notebook(file_path, result)
+        return result
 
     async def get_active_cell_id(self, file_path, username):
         resp = await run_lab_command(
@@ -708,9 +722,6 @@ class YDocAdapter(BaseAdapter):
 
     _disk = DiskAdapter()
 
-    def __init__(self, file_path: Optional[str]):
-        self._file_path = file_path
-
     @staticmethod
     def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
         """True iff the notebook has exactly one cell and it is empty.
@@ -759,11 +770,8 @@ class YDocAdapter(BaseAdapter):
                 return active_cell_id
         return None
 
-    async def _load_ydoc(self, file_path: Optional[str] = None) -> Optional[YNotebook]:
-        resolved = normalize_filepath(file_path) if file_path else self._file_path
-        if resolved is None:
-            return None
-        file_id = await get_file_id(resolved)
+    async def _load_ydoc(self, file_path: str) -> Optional[YNotebook]:
+        file_id = await get_file_id(normalize_filepath(file_path))
         return await get_jupyter_ydoc(file_id)
 
     async def read(self, file_path: str) -> dict:
@@ -1162,5 +1170,5 @@ async def get_adapter(file_path: Optional[str] = None) -> BaseAdapter:
     Without RTC: returns a FrontendAdapter that falls back to disk when no browser is connected.
     """
     if rtc_available():
-        return YDocAdapter(normalize_filepath(file_path) if file_path else None)
+        return YDocAdapter()
     return FrontendAdapter()

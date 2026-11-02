@@ -31,9 +31,9 @@ EDITS = {
 @pytest.fixture(autouse=True)
 def _rtc_free():
     with (
-        patch("jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=False),
+        patch("jupyter_ai_tools.adapters.notebook.rtc_available", return_value=False),
         patch(
-            "jupyter_ai_tools.toolkits.notebook.select_cell",
+            "jupyter_ai_tools.adapters.notebook.FrontendAdapter.select_cell",
             new_callable=AsyncMock,
             return_value={"success": True},
         ),
@@ -65,7 +65,7 @@ def frontend(edit_result=OK, save_result=OK):
         return edit_result
 
     return patch(
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        "jupyter_ai_tools.adapters.notebook.run_lab_command",
         new_callable=AsyncMock,
         side_effect=run,
     )
@@ -97,7 +97,7 @@ async def test_no_save_after_edit_of_the_file(edit, notebook_path):
     An edit that went to the notebook file, as no web client is connected, is on disk.
     """
     with patch(
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        "jupyter_ai_tools.adapters.notebook.run_lab_command",
         new_callable=AsyncMock,
         return_value=NO_WEB_CLIENT,
     ) as mock:
@@ -121,7 +121,7 @@ async def test_saves_after_content_edit_when_type_change_fails():
         return OK if command_id == SAVE else next(results)
 
     with patch(
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        "jupyter_ai_tools.adapters.notebook.run_lab_command",
         new_callable=AsyncMock,
         side_effect=run,
     ) as mock:
@@ -133,7 +133,7 @@ async def test_saves_after_content_edit_when_type_change_fails():
 async def test_saves_after_content_edit_when_select_cell_raises():
     with (
         patch(
-            "jupyter_ai_tools.toolkits.notebook.select_cell",
+            "jupyter_ai_tools.adapters.notebook.FrontendAdapter.select_cell",
             new_callable=AsyncMock,
             side_effect=ValueError("Cell with ID cell-1 not found in notebook"),
         ),
