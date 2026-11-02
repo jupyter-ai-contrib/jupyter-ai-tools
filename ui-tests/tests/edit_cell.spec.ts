@@ -1,6 +1,6 @@
 import { test, expect } from './base';
 import { callTool } from './mcp-client';
-import { buildNotebook } from './fixtures';
+import { buildNotebook, readCellsOnDisk } from './fixtures';
 
 // edit_cell: change a cell's content and/or type (YDoc-backed under RTC;
 // set-cell-content + change-cell-to-* commands when RTC-free).
@@ -29,5 +29,23 @@ test.describe('edit_cell', () => {
     await expect
       .poll(async () => page.notebook.getCellType(0))
       .toBe('markdown');
+  });
+
+  test('saves the edited cell to disk', async ({ page, tmpPath, mcp }) => {
+    const { path, cellIds } = await buildNotebook(page, tmpPath);
+    const res = await callTool(mcp, 'edit_cell', {
+      file_path: path,
+      cell_id: cellIds[0],
+      content: '## saved',
+      cell_type: 'markdown'
+    });
+    expect(res.isError, res.text).toBe(false);
+    await expect
+      .poll(async () =>
+        (await readCellsOnDisk(page, path)).map(
+          (cell: any) => `${cell.cell_type}: ${cell.source}`
+        )
+      )
+      .toContain('markdown: ## saved');
   });
 });

@@ -798,6 +798,21 @@ def _is_single_empty_notebook(ydoc: YNotebook) -> bool:
         return False
 
 
+async def _save_notebook_in_frontend(file_path: str, result: dict) -> dict:
+    """
+    Save the notebook in the JupyterLab web client after an edit there.
+
+    Without RTC, an edit only changes the notebook model in the web client, and
+    it is lost if the browser tab closes before JupyterLab saves the notebook.
+    """
+    saved = await run_lab_command(
+        "jupyterlab-ai-commands:save-notebook", {"notebookPath": file_path}
+    )
+    if saved.get("success"):
+        return result
+    return {**result, "save_error": saved.get("error") or "The notebook could not be saved"}
+
+
 async def add_cell(
     file_path: str,
     content: Optional[str] = None,
@@ -843,6 +858,8 @@ async def add_cell(
             },
         )
         if not no_web_client(result):
+            if result.get("success"):
+                result = await _save_notebook_in_frontend(file_path, result)
             return result
         new_cell_id = _add_cell_to_file(
             normalize_filepath(file_path), content, cell_id, add_above, cell_type
@@ -950,7 +967,7 @@ async def insert_cell(
             ref, position = cells[-1]["cellId"], "below"
         else:
             ref, position = cells[idx]["cellId"], "above"
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:add-cell",
             {
                 "notebookPath": file_path,
@@ -960,6 +977,9 @@ async def insert_cell(
                 "position": position,
             },
         )
+        if result.get("success"):
+            result = await _save_notebook_in_frontend(file_path, result)
+        return result
     try:
         file_path = normalize_filepath(file_path)
         file_id = await get_file_id(file_path)
@@ -1015,6 +1035,8 @@ async def delete_cell(file_path: str, cell_id: str):
             {"notebookPath": file_path, "cellId": cell_id},
         )
         if not no_web_client(result):
+            if result.get("success"):
+                result = await _save_notebook_in_frontend(file_path, result)
             return result
         if _delete_cell_from_file(normalize_filepath(file_path), cell_id) is None:
             raise ValueError(f"Could not find cell index for {cell_id=}")
@@ -1659,26 +1681,34 @@ async def edit_cell(
     """
     if not rtc_available():
         rtc_free_result: dict = {"success": True}
-        if content is not None:
-            rtc_free_result = await run_lab_command(
-                "jupyterlab-ai-commands:set-cell-content",
-                {
-                    "notebookPath": file_path,
-                    "cellId": cell_id,
-                    "content": content,
-                    "showDiff": False,
-                },
-            )
-        if cell_type is not None and rtc_free_result.get("success"):
-            # change-cell-to-* act on the selected cell, so select it first.
-            rtc_free_result = await select_cell(cell_id, file_path=file_path)
-            if rtc_free_result.get("success"):
-                type_command = {
-                    "code": "notebook:change-cell-to-code",
-                    "markdown": "notebook:change-cell-to-markdown",
-                    "raw": "notebook:change-cell-to-raw",
-                }[cell_type]
-                rtc_free_result = await run_lab_command(type_command)
+        edited = False
+        try:
+            if content is not None:
+                rtc_free_result = await run_lab_command(
+                    "jupyterlab-ai-commands:set-cell-content",
+                    {
+                        "notebookPath": file_path,
+                        "cellId": cell_id,
+                        "content": content,
+                        "showDiff": False,
+                    },
+                )
+                edited = bool(rtc_free_result.get("success"))
+            if cell_type is not None and rtc_free_result.get("success"):
+                # change-cell-to-* act on the selected cell, so select it first.
+                rtc_free_result = await select_cell(cell_id, file_path=file_path)
+                if rtc_free_result.get("success"):
+                    type_command = {
+                        "code": "notebook:change-cell-to-code",
+                        "markdown": "notebook:change-cell-to-markdown",
+                        "raw": "notebook:change-cell-to-raw",
+                    }[cell_type]
+                    rtc_free_result = await run_lab_command(type_command)
+                    edited = edited or bool(rtc_free_result.get("success"))
+        finally:
+            # Save even if the type change raised, so a content edit is not lost.
+            if edited:
+                rtc_free_result = await _save_notebook_in_frontend(file_path, rtc_free_result)
         if no_web_client(rtc_free_result):
             _edit_cell_in_file(normalize_filepath(file_path), cell_id, content, cell_type)
             return _file_result(
