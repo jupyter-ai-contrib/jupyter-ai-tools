@@ -333,7 +333,7 @@ __metadata:
   resolution: "@jupyter-ai/tools-ui-tests@workspace:."
   dependencies:
     "@jupyterlab/galata": ^5.0.0
-    "@modelcontextprotocol/sdk": ^1.0.0
+    "@modelcontextprotocol/sdk": ^1.32.0
     "@playwright/test": ^1.37.0
   languageName: unknown
   linkType: soft
@@ -1468,9 +1468,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@modelcontextprotocol/sdk@npm:^1.0.0":
-  version: 1.30.0
-  resolution: "@modelcontextprotocol/sdk@npm:1.30.0"
+"@modelcontextprotocol/sdk@npm:^1.32.0":
+  version: 1.32.0
+  resolution: "@modelcontextprotocol/sdk@npm:1.32.0"
   dependencies:
     "@hono/node-server": ^1.19.9 || ^2.0.5
     ajv: ^8.17.1
@@ -1497,7 +1497,7 @@ __metadata:
       optional: true
     zod:
       optional: false
-  checksum: a932a26bfdb2097eb379a0ff526191fdb2dd15e2aa3d191fc58803a550139caf11f217a75f7d6929e8683a97124da619dbe0b0e17837e82372acd6bab39cd050
+  checksum: e43e7f982bac4ae4a0b2e0349f219db522d01c0f192c45ce6b33c4cfc71b04a0c9de594c867f92225ddd25140549c1b778f5f2f3046586f93478099dbeb7cd74
   languageName: node
   linkType: hard
 
