@@ -870,11 +870,10 @@ async def add_cell(
             cellId=new_cell_id,
         )
     try:
+        file_id = await get_file_id(file_path)
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
         ydoc: YNotebook = await get_jupyter_ydoc(file_id)
 
         if ydoc:
@@ -981,8 +980,8 @@ async def insert_cell(
             result = await _save_notebook_in_frontend(file_path, result)
         return result
     try:
-        file_path = normalize_filepath(file_path)
         file_id = await get_file_id(file_path)
+        file_path = normalize_filepath(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
 
         if ydoc:
@@ -1046,11 +1045,10 @@ async def delete_cell(file_path: str, cell_id: str):
             cellId=cell_id,
         )
     try:
+        file_id = await get_file_id(file_path)
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
 
         if ydoc:
@@ -1543,8 +1541,7 @@ async def get_active_cell_id(notebook_path: str, username: Optional[str] = None)
         if no_web_client(resp):
             raise RuntimeError(resp["error"])
         return (resp.get("result") or {}).get("activeCellId")
-    file_path = normalize_filepath(notebook_path)
-    file_id = await get_file_id(file_path)
+    file_id = await get_file_id(notebook_path)
     ydoc = await get_jupyter_ydoc(file_id)
 
     return _get_active_cell_id_from_ydoc(ydoc, username)
@@ -1718,11 +1715,10 @@ async def edit_cell(
             )
         return rtc_free_result
     try:
+        file_id = await get_file_id(file_path)
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
         resolved_cell_id = cell_id
-
-        file_id = await get_file_id(file_path)
         ydoc = await get_jupyter_ydoc(file_id)
 
         if ydoc:

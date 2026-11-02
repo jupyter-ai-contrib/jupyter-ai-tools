@@ -181,16 +181,25 @@ async def get_file_id(file_path: str) -> str:
 
     Args:
         file_path:
-            absolute path to the document file
+            Contents API path or absolute filesystem path to the document.
 
     Returns:
         The file ID of the document
     """
-    normalized_file_path = normalize_filepath(file_path)
+    if not file_path or not file_path.strip():
+        raise ValueError("file_path cannot be empty")
 
     serverapp = get_serverapp()
+    # File IDs use contents API paths, including any directory symlinks.
+    # Resolving the filesystem path would discard the name of a shared tree.
+    root_dir = os.path.abspath(serverapp.root_dir)
+    absolute_path = os.path.abspath(os.path.join(root_dir, unquote(file_path)))
+    try:
+        api_path = Path(absolute_path).relative_to(root_dir).as_posix()
+    except ValueError:
+        api_path = absolute_path
     file_id_manager = serverapp.web_app.settings["file_id_manager"]
-    file_id = file_id_manager.get_id(normalized_file_path)
+    file_id = file_id_manager.get_id(api_path)
 
     return file_id
 
