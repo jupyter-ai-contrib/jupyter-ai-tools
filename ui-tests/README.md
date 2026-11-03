@@ -125,7 +125,8 @@ behaves identically with or without a provider:
 * Numeric-index `cell_id` (e.g. `"0"`) — cells are now addressed only by their
   nbformat id. Indices shift on every add/delete and, RTC-free, resolving one
   from disk can read a stale notebook, so index targeting was a correctness
-  footgun. Use `get_cell_id_from_index` to map an index to an id, or read the
+  footgun. Cell numbers shown by JupyterLab are one-based; use
+  `get_cell_id_from_index` to map one to an id, or read the
   ordered ids from `read_notebook` / `read_notebook_cells`. `read_notebook`'s
   markdown now includes each cell's `id` in its metadata block.
 
