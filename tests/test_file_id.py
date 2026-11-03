@@ -8,6 +8,7 @@ from jupyter_server_fileid.manager import ArbitraryFileIdManager, LocalFileIdMan
 from jupyter_ydoc import YNotebook
 
 from jupyter_ai_tools import utils
+from jupyter_ai_tools.adapters import notebook as adapters
 from jupyter_ai_tools.toolkits import notebook
 
 
@@ -72,15 +73,19 @@ async def test_tools_use_shared_live_notebook(notebook_room, monkeypatch, operat
     async def get_ydoc(file_id):
         return ydoc if file_id == expected else None
 
-    monkeypatch.setattr(notebook, "rtc_available", lambda: True)
-    monkeypatch.setattr(notebook, "get_jupyter_ydoc", get_ydoc)
+    async def no_frontend(command_id, args=None):
+        return {"success": False, "error_code": "no_web_client"}
+
+    monkeypatch.setattr(adapters, "run_lab_command", no_frontend)
+    monkeypatch.setattr(adapters, "rtc_available", lambda: True)
+    monkeypatch.setattr(adapters, "get_jupyter_ydoc", get_ydoc)
     monkeypatch.setattr(
-        notebook,
-        "_get_active_cell_id_from_ydoc",
-        lambda doc, *_: "original" if doc is not None else None,
+        adapters.YDocAdapter,
+        "_get_active_cell_id",
+        staticmethod(lambda doc, *_: "original" if doc is not None else None),
     )
     if operation == "read":
-        result = await notebook._read_notebook_to_run(api_path)
+        result = await adapters._read_notebook_to_run(api_path)
         assert result.cells[0].source == "unsaved = 2"
     elif operation == "add":
         await notebook.add_cell(api_path, "new = 3")

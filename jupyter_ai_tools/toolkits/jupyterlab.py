@@ -1,39 +1,12 @@
-import asyncio
 import os
-from typing import Optional, Set
+from typing import Optional
 
 from jupyterlab_commands_toolkit.tools import execute_command
 
-from ..utils import get_serverapp, no_web_client, rtc_available, run_lab_command
+from ..adapters.notebook import get_adapter
+from ..utils import get_serverapp
 
-# The frontend commands get the same limit from jupyterlab-commands-toolkit.
-_MAX_TIMEOUT = 10.0
-
-_background_tasks: Set[asyncio.Task] = set()
-
-
-def _finish_background_task(task: asyncio.Task) -> None:
-    _background_tasks.discard(task)
-    if not task.cancelled() and task.exception() is not None:
-        get_serverapp().log.error("A tool call failed after its timeout", exc_info=task.exception())
-
-
-async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) -> dict:
-    """Run a coroutine with an optional timeout.
-
-    If timeout is exceeded, the task continues in the background.
-    """
-    task = asyncio.create_task(coro)
-    try:
-        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
-    except asyncio.TimeoutError:
-        # Keep a reference to the task, and log its error, as nothing awaits it now.
-        _background_tasks.add(task)
-        task.add_done_callback(_finish_background_task)
-        return {
-            "status": "timed_out",
-            "message": f"{started_msg}, timed out after {timeout}s of waiting",
-        }
+__all__ = ["open_file", "run_cell", "run_all_cells"]
 
 
 async def open_file(file_path: str):
@@ -57,24 +30,6 @@ async def open_file(file_path: str):
             pass
 
     return await execute_command("docmanager:open", {"path": file_path})
-
-
-async def _run_cells_on_server(
-    file_path: str,
-    cell_id: Optional[str],
-    write_outputs: bool,
-    timeout: Optional[float],
-    started_msg: str,
-) -> dict:
-    """
-    Run cells in the kernel of the notebook on the server, with the limit of the frontend.
-    """
-    from .notebook import _run_cells
-
-    timeout = _MAX_TIMEOUT if timeout is None else min(timeout, _MAX_TIMEOUT)
-    return await _run_with_timeout(
-        _run_cells(file_path, cell_id, write_outputs), timeout, started_msg
-    )
 
 
 async def run_all_cells(
@@ -107,20 +62,8 @@ async def run_all_cells(
     Returns:
         dict with `success` (bool) and optional `error` or `result` fields.
     """
-    started_msg = "Run all cells started"
-    if not write_outputs:
-        if not file_path:
-            raise ValueError("file_path is required when write_outputs is False")
-        return await _run_cells_on_server(file_path, None, False, timeout, started_msg)
-
-    if file_path:
-        result = await open_file(file_path)
-        if no_web_client(result) and not rtc_available():
-            return await _run_cells_on_server(file_path, None, True, timeout, started_msg)
-        if not result.get("success"):
-            return result
-
-    return await _run_with_timeout(execute_command("notebook:run-all-cells"), timeout, started_msg)
+    adapter = await get_adapter(file_path)
+    return await adapter.run_all_cells(file_path, timeout, write_outputs)
 
 
 async def run_cell(
@@ -162,37 +105,8 @@ async def run_cell(
     Returns:
         dict with `success` (bool) and optional `error` or `result` fields.
     """
-    from .notebook import select_cell
-
-    started_msg = "Cell execution started"
-    if not write_outputs:
-        if not file_path:
-            raise ValueError("file_path is required when write_outputs is False")
-        return await _run_cells_on_server(file_path, cell_id, False, timeout, started_msg)
-
-    if not rtc_available():
-        # RTC-free: jupyterlab-ai-commands run-cell targets the cell by id and
-        # opens the notebook itself, so no awareness-based select is needed.
-        result = await _run_with_timeout(
-            run_lab_command(
-                "jupyterlab-ai-commands:run-cell",
-                {"notebookPath": file_path, "cellId": cell_id},
-            ),
-            timeout,
-            started_msg,
-        )
-        if not (file_path and no_web_client(result)):
-            return result
-        return await _run_cells_on_server(file_path, cell_id, True, timeout, started_msg)
-
-    if file_path:
-        result = await open_file(file_path)
-        if not result.get("success"):
-            return result
-
-    await select_cell(cell_id, username, file_path=file_path)
-
-    return await _run_with_timeout(execute_command("notebook:run-cell"), timeout, started_msg)
+    adapter = await get_adapter(file_path)
+    return await adapter.run_cell(cell_id, file_path, username, timeout, write_outputs)
 
 
 toolkit = [open_file, run_cell, run_all_cells]

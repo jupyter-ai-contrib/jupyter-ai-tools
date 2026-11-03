@@ -2,7 +2,7 @@
 
 from jupyter_ydoc import YNotebook
 
-from jupyter_ai_tools.toolkits.notebook import _get_cell_index_from_id_ydoc
+from jupyter_ai_tools.adapters.notebook import YDocAdapter
 
 
 def _populate(ydoc, cells):
@@ -41,9 +41,9 @@ def test_returns_index_when_cell_id_matches():
         ],
     )
 
-    assert _get_cell_index_from_id_ydoc(ydoc, "first") == 0
-    assert _get_cell_index_from_id_ydoc(ydoc, "second") == 1
-    assert _get_cell_index_from_id_ydoc(ydoc, "third") == 2
+    assert YDocAdapter._get_cell_index_from_id(ydoc, "first") == 0
+    assert YDocAdapter._get_cell_index_from_id(ydoc, "second") == 1
+    assert YDocAdapter._get_cell_index_from_id(ydoc, "third") == 2
 
 
 def test_returns_none_when_cell_id_missing():
@@ -62,11 +62,11 @@ def test_returns_none_when_cell_id_missing():
         ],
     )
 
-    assert _get_cell_index_from_id_ydoc(ydoc, "nonexistent") is None
+    assert YDocAdapter._get_cell_index_from_id(ydoc, "nonexistent") is None
 
 
 def test_returns_none_for_empty_notebook():
     ydoc = YNotebook()
     _populate(ydoc, [])
 
-    assert _get_cell_index_from_id_ydoc(ydoc, "anything") is None
+    assert YDocAdapter._get_cell_index_from_id(ydoc, "anything") is None

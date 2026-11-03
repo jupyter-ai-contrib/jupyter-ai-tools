@@ -37,7 +37,7 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture(autouse=True)
 def _rtc_free():
-    with patch("jupyter_ai_tools.toolkits.notebook.rtc_available", return_value=False):
+    with patch("jupyter_ai_tools.adapters.notebook.rtc_available", return_value=False):
         yield
 
 
@@ -45,7 +45,7 @@ def _rtc_free():
 def no_web_client():
     """Make every frontend command report that no web client received it."""
     with patch(
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        "jupyter_ai_tools.adapters.notebook.run_lab_command",
         new_callable=AsyncMock,
         return_value=NO_WEB_CLIENT,
     ) as mock:
@@ -56,7 +56,7 @@ def no_web_client():
 def command_error():
     """Make every frontend command fail for another reason."""
     with patch(
-        "jupyter_ai_tools.toolkits.notebook.run_lab_command",
+        "jupyter_ai_tools.adapters.notebook.run_lab_command",
         new_callable=AsyncMock,
         return_value=COMMAND_ERROR,
     ) as mock:

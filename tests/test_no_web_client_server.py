@@ -10,8 +10,9 @@ import os
 import nbformat
 import pytest
 
+from jupyter_ai_tools.adapters.notebook import DiskAdapter
 from jupyter_ai_tools.toolkits.jupyterlab import run_all_cells, run_cell
-from jupyter_ai_tools.toolkits.notebook import _run_cells, add_cell, read_notebook_json
+from jupyter_ai_tools.toolkits.notebook import add_cell, read_notebook_json
 
 
 @pytest.fixture
@@ -184,7 +185,7 @@ async def test_concurrent_runs_start_one_session(jp_serverapp, jp_root_dir):
 
 async def test_kernel_restart_stops_the_run(jp_serverapp, jp_root_dir):
     _write_notebook(jp_root_dir, "import time; time.sleep(60)")
-    run = asyncio.create_task(_run_cells("notebook.ipynb", "cell-0"))
+    run = asyncio.create_task(DiskAdapter()._run_cells_impl("notebook.ipynb", "cell-0", True))
     kernel_id = ""
     for _ in range(200):
         sessions = await jp_serverapp.session_manager.list_sessions()
