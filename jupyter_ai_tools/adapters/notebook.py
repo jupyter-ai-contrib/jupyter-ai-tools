@@ -917,7 +917,7 @@ class YDocAdapter(BaseAdapter):
         return result
 
     async def run_cell(self, cell_id, file_path, username, timeout, write_outputs):
-        if not file_path and username:
+        if not file_path:
             file_path = await self.get_active_notebook(username)
         if not file_path:
             raise RuntimeError("No active notebook found. Please open a notebook first.")
