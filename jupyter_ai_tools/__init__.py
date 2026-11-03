@@ -2,7 +2,7 @@ from .adapters import notebook as notebook_adapters
 from .toolkits.jupyterlab import toolkit as jlab_toolkit
 from .toolkits.notebook import toolkit as nb_toolkit
 
-__version__ = "0.7.0"
+__version__ = "0.8.0a0"
 
 __all__ = [
     "nb_toolkit",
