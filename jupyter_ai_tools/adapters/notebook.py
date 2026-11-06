@@ -771,7 +771,7 @@ class YDocAdapter(BaseAdapter):
         return None
 
     async def _load_ydoc(self, file_path: str) -> Optional[YNotebook]:
-        file_id = await get_file_id(normalize_filepath(file_path))
+        file_id = await get_file_id(file_path)
         return await get_jupyter_ydoc(file_id)
 
     async def read(self, file_path: str) -> dict:

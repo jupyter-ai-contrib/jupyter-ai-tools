@@ -42,7 +42,7 @@ dependencies = [
 # run_cell) read.
 rtc = ["jupyterlab-notebook-awareness"]
 mcp = ["mcp>=1.0"]
-test = ["pytest>=7.0", "pytest-jupyter[server]>=0.6", "pytest-asyncio", "mcp>=1.0"]
+test = ["pytest>=7.0", "pytest-jupyter[server]>=0.6", "pytest-asyncio", "mcp>=1.0", "jupyter_server_fileid>=0.9.3"]
 lint = [
   "black>=22.6.0",
   "ruff>=0.0.156",
