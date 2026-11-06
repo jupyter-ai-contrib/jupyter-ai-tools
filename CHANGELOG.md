@@ -2,6 +2,47 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.8.0
+
+([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.7.0...83795193b8522e4359995d250cb176b5c12c6a8b))
+
+### Bugs fixed
+
+- Save the notebook after an edit in the web client [#52](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/52) ([@jtpio](https://github.com/jtpio), [@brichet](https://github.com/brichet))
+- Fall back to the notebook file when no web client is connected [#51](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/51) ([@jtpio](https://github.com/jtpio), [@brichet](https://github.com/brichet))
+
+### Maintenance and upkeep improvements
+
+- Fix pytest-asycio warning [#68](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/68) ([@brichet](https://github.com/brichet), [@jtpio](https://github.com/jtpio))
+- Pin Yarn 3.5.0 with packageManager for dependabot PRs [#64](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/64) ([@brichet](https://github.com/brichet), [@jtpio](https://github.com/jtpio))
+- Fix the CI badge link in the README [#58](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/58) ([@jtpio](https://github.com/jtpio))
+
+### Other merged PRs
+
+- Bump undici from 8.10.0 to 8.12.3 in /ui-tests [#66](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/66) ([@brichet](https://github.com/brichet))
+- Bump @hono/node-server from 2.1.1 to 2.1.5 in /ui-tests [#67](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/67) ([@brichet](https://github.com/brichet))
+- Bump qs from 6.15.3 to 6.17.1 in /ui-tests [#65](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/65) ([@brichet](https://github.com/brichet))
+- Bump dompurify from 3.4.14 to 3.4.17 in /ui-tests [#63](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/63) ([@brichet](https://github.com/brichet))
+- Bump @modelcontextprotocol/sdk from 1.30.0 to 1.32.0 in /ui-tests [#61](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/61) ([@brichet](https://github.com/brichet))
+- Bump hono from 4.13.3 to 4.13.14 in /ui-tests [#60](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/60) ([@brichet](https://github.com/brichet))
+- Refactoring: use notebook adapters for operations (RTC, web client, file) [#59](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/59) ([@brichet](https://github.com/brichet), [@jtpio](https://github.com/jtpio))
+- Bump proxy-addr from 2.0.7 to 2.0.8 in /ui-tests [#57](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/57) ([@brichet](https://github.com/brichet))
+- Bump source-map-js from 1.2.1 to 1.2.2 in /ui-tests [#56](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/56) ([@brichet](https://github.com/brichet))
+- Fix cell ID lookup for displayed cell numbers [#54](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/54) ([@IT-Althusser](https://github.com/IT-Althusser), [@brichet](https://github.com/brichet), [@dlqqq](https://github.com/dlqqq))
+- Bump ip-address from 10.5.0 to 10.7.5 in /ui-tests [#50](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/50) ([@brichet](https://github.com/brichet))
+- Bump fast-uri from 3.1.5 to 3.1.9 in /ui-tests [#43](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/pull/43) ([@brichet](https://github.com/brichet))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-09-02&to=2026-11-06&type=c))
+
+@brichet ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Abrichet+updated%3A2026-09-02..2026-11-06&type=Issues)) | @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-09-02..2026-11-06&type=Issues)) | @IT-Althusser ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3AIT-Althusser+updated%3A2026-09-02..2026-11-06&type=Issues)) | @jtpio ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajtpio+updated%3A2026-09-02..2026-11-06&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.8.0a0
 
 ([Full Changelog](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/compare/v0.7.0...83795193b8522e4359995d250cb176b5c12c6a8b))
@@ -40,8 +81,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/jupyter-ai-contrib/jupyter-ai-tools/graphs/contributors?from=2026-09-02&to=2026-11-03&type=c))
 
 @brichet ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Abrichet+updated%3A2026-09-02..2026-11-03&type=Issues)) | @dlqqq ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Adlqqq+updated%3A2026-09-02..2026-11-03&type=Issues)) | @IT-Althusser ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3AIT-Althusser+updated%3A2026-09-02..2026-11-03&type=Issues)) | @jtpio ([activity](https://github.com/search?q=repo%3Ajupyter-ai-contrib%2Fjupyter-ai-tools+involves%3Ajtpio+updated%3A2026-09-02..2026-11-03&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.7.0
 
