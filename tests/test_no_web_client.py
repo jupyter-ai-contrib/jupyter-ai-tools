@@ -7,6 +7,7 @@ the notebook in that case.
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import nbformat
@@ -106,9 +107,9 @@ async def test_add_cell_above(no_web_client, notebook_path):
     assert [cell.source for cell in _cells(notebook_path)] == ["x = 1", "print(1)", "# Title"]
 
 
-async def test_add_cell_returns_command_error(command_error, notebook_path):
-    result = await add_cell(notebook_path, "x = 1")
-    assert result == COMMAND_ERROR
+async def test_add_cell_raises_command_error(command_error, notebook_path):
+    with pytest.raises(RuntimeError, match="Cell not found"):
+        await add_cell(notebook_path, "x = 1")
     assert len(_cells(notebook_path)) == 2
 
 
@@ -125,9 +126,9 @@ async def test_insert_cell_appends_without_index(no_web_client, notebook_path):
     assert [cell.source for cell in _cells(notebook_path)][-1] == "last"
 
 
-async def test_insert_cell_returns_command_error(command_error, notebook_path):
-    result = await insert_cell(notebook_path, "x = 1", insert_index=0)
-    assert result == COMMAND_ERROR
+async def test_insert_cell_raises_command_error(command_error, notebook_path):
+    with pytest.raises(RuntimeError, match="Cell not found"):
+        await insert_cell(notebook_path, "x = 1", insert_index=0)
     assert len(_cells(notebook_path)) == 2
 
 
@@ -161,9 +162,9 @@ async def test_edit_cell_type_only(no_web_client, notebook_path):
     assert cell.outputs == []
 
 
-async def test_edit_cell_returns_command_error(command_error, notebook_path):
-    result = await edit_cell(notebook_path, "cell-1", content="x", cell_type="markdown")
-    assert result == COMMAND_ERROR
+async def test_edit_cell_raises_command_error(command_error, notebook_path):
+    with pytest.raises(RuntimeError, match="Cell not found"):
+        await edit_cell(notebook_path, "cell-1", content="x", cell_type="markdown")
     assert _cells(notebook_path)[0].source == "print(1)"
 
 
@@ -188,7 +189,8 @@ async def test_create_notebook_reports_not_opened(notebook_path):
         "jupyter_ai_tools.toolkits.jupyterlab.execute_command",
         new_callable=AsyncMock,
         return_value=NO_WEB_CLIENT,
-    ):
+    ), patch("jupyter_ai_tools.utils.get_serverapp") as server:
+        server.return_value.root_dir = str(Path(notebook_path).parent)
         message = await create_notebook(notebook_path)
     assert message.startswith("Successfully created notebook")
     assert "not open in JupyterLab" in message

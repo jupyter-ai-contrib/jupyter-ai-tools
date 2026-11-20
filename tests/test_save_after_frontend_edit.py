@@ -86,8 +86,8 @@ async def test_saves_after_edit(edit):
 @pytest.mark.parametrize("edit", EDITS)
 async def test_no_save_after_failed_edit(edit):
     with frontend(edit_result=FAILED) as mock:
-        result = await EDITS[edit]("nb.ipynb")
-    assert result == FAILED
+        with pytest.raises(RuntimeError, match="Cell not found"):
+            await EDITS[edit]("nb.ipynb")
     assert saves(mock) == []
 
 
@@ -126,7 +126,8 @@ async def test_saves_after_content_edit_when_type_change_fails():
         side_effect=run,
     ) as mock:
         result = await edit_cell("nb.ipynb", "cell-1", content="x = 2", cell_type="markdown")
-    assert result == FAILED
+    assert result["error"] == FAILED["error"]
+    assert "content was edited" in result["message"]
     assert len(saves(mock)) == 1
 
 

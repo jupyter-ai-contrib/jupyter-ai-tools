@@ -542,9 +542,8 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.add_cell(file_path, content, cell_id, add_above, cell_type)
-        if result.get("success"):
-            return await self._save_notebook(file_path, result)
-        return result
+        command_result(result)
+        return await self._save_notebook(file_path, result)
 
     async def insert_cell(self, file_path, content, insert_index, cell_type, animate=False):
         info = await run_lab_command(
@@ -552,9 +551,7 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(info):
             return await self._disk.insert_cell(file_path, content, insert_index, cell_type)
-        if not info.get("success"):
-            return info
-        cells = (info.get("result") or {}).get("cells") or []
+        cells = (command_result(info) or {}).get("cells") or []
         idx = insert_index if insert_index is not None else len(cells)
         if not cells:
             ref, position = None, "below"
@@ -574,9 +571,8 @@ class FrontendAdapter(BaseAdapter):
                 "position": position,
             },
         )
-        if result.get("success"):
-            return await self._save_notebook(file_path, result)
-        return result
+        command_result(result)
+        return await self._save_notebook(file_path, result)
 
     async def delete_cell(self, file_path, cell_id):
         result = await run_lab_command(
@@ -585,9 +581,8 @@ class FrontendAdapter(BaseAdapter):
         )
         if no_web_client(result):
             return await self._disk.delete_cell(file_path, cell_id)
-        if result.get("success"):
-            return await self._save_notebook(file_path, result)
-        return result
+        command_result(result)
+        return await self._save_notebook(file_path, result)
 
     async def edit_cell(self, file_path, cell_id, content, cell_type, animate=False):
         if content is None and cell_type is None:
@@ -619,8 +614,14 @@ class FrontendAdapter(BaseAdapter):
         finally:
             if edited:
                 result = await self._save_notebook(file_path, result)
+        if edited and not result.get("success"):
+            return {
+                **result,
+                "message": "The cell content was edited, but its type could not be changed.",
+            }
         if no_web_client(result):
             return await self._disk.edit_cell(file_path, cell_id, content, cell_type)
+        command_result(result)
         return result
 
     async def get_active_cell_id(self, file_path, username):
@@ -709,7 +710,11 @@ class FrontendAdapter(BaseAdapter):
         )
         if saved.get("success"):
             return result
-        return {**result, "save_error": saved.get("error") or "The notebook could not be saved"}
+        return {
+            **result,
+            "save_error": saved.get("error") or "The notebook could not be saved",
+            "save_message": "The edit was applied in JupyterLab. Retry saving, not the edit.",
+        }
 
 
 class YDocAdapter(BaseAdapter):

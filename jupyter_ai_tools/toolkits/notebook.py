@@ -10,12 +10,12 @@ from ..adapters._notebook_helpers import (
     get_cell_index_from_id_json,
     get_cell_index_from_id_nbformat,
     process_notebook_output,
-    write_notebook_file,
 )
 from ..adapters.notebook import get_adapter
 from ..utils import (
     cell_to_md,
     normalize_filepath,
+    notebook_api_path,
     notebook_json_to_md,
 )
 
@@ -591,17 +591,18 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
             available kernel. Use "python3" for general-purpose notebooks.
 
     Returns:
-        A success message or error message.
+        A success message including the Jupyter root-relative path.
     """
     try:
         from .jupyterlab import open_file
 
-        file_path = normalize_filepath(file_path)
+        api_path = notebook_api_path(file_path)
+        disk_path = normalize_filepath(file_path)
 
-        if os.path.exists(file_path):
-            raise FileExistsError(f"Notebook at path {file_path} already exists.")
+        if os.path.exists(disk_path):
+            raise FileExistsError(f"Notebook at path {api_path} already exists.")
 
-        directory = os.path.dirname(file_path)
+        directory = os.path.dirname(disk_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
 
@@ -618,18 +619,19 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
 
         notebook["metadata"] = {"kernelspec": spec}
 
-        write_notebook_file(file_path, notebook)
+        with open(disk_path, "x", encoding="utf-8") as f:
+            nbformat.write(notebook, f)
 
         opened = await open_file(file_path)
         if not opened.get("success"):
             return (
-                f"Successfully created notebook: {file_path}. "
+                f"Successfully created notebook: {api_path}. "
                 f"It is not open in JupyterLab: {opened.get('error')}"
             )
-        return f"Successfully created and opened notebook: {file_path}"
+        return f"Successfully created and opened notebook: {api_path}"
 
     except Exception as e:
-        return f"Error: Failed to create notebook: {str(e)}"
+        raise RuntimeError(f"Failed to create notebook: {e}") from e
 
 
 toolkit = [

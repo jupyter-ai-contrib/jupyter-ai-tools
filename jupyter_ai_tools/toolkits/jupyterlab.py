@@ -1,10 +1,9 @@
-import os
 from typing import Optional
 
 from jupyterlab_commands_toolkit.tools import execute_command
 
 from ..adapters.notebook import get_adapter
-from ..utils import get_serverapp
+from ..utils import notebook_api_path
 
 __all__ = ["open_file", "run_cell", "run_all_cells"]
 
@@ -18,16 +17,7 @@ async def open_file(file_path: str):
     Returns:
         dict: Response from JupyterLab with success, result, and optional error fields
     """
-    if os.path.isabs(file_path):
-        try:
-            root_dir = get_serverapp().root_dir
-        except Exception:
-            root_dir = os.getcwd()
-
-        try:
-            file_path = os.path.relpath(file_path, root_dir)
-        except ValueError:
-            pass
+    file_path = notebook_api_path(file_path)
 
     return await execute_command("docmanager:open", {"path": file_path})
 

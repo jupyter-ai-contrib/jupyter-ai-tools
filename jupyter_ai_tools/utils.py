@@ -64,7 +64,26 @@ async def run_lab_command(command_id: str, args: Optional[Dict] = None) -> dict:
     """
     from jupyterlab_commands_toolkit.tools import execute_command
 
-    return await execute_command(command_id, args or {})
+    arguments = dict(args or {})
+    if arguments.get("notebookPath") is not None:
+        arguments["notebookPath"] = notebook_api_path(arguments["notebookPath"])
+    return await execute_command(command_id, arguments)
+
+
+def notebook_api_path(file_path: str) -> str:
+    """Translate a notebook input to its path in the Jupyter Contents API."""
+    if not file_path or not file_path.strip():
+        raise ValueError("file_path cannot be empty")
+
+    root = Path(os.path.abspath(get_serverapp().root_dir or os.getcwd()))
+    path = Path(unquote(file_path)).expanduser()
+    absolute = Path(os.path.abspath(root / path))
+    try:
+        return absolute.relative_to(root).as_posix()
+    except ValueError:
+        raise ValueError(
+            "Notebook path must be inside the Jupyter root. Use a root-relative path."
+        ) from None
 
 
 def no_web_client(result: Any) -> bool:
@@ -109,7 +128,7 @@ def normalize_filepath(file_path: str) -> str:
     decoded_path = unquote(file_path)
 
     # Convert to Path object for easier manipulation
-    path = Path(decoded_path)
+    path = Path(decoded_path).expanduser()
 
     # If already absolute, just normalize and return
     if path.is_absolute():
