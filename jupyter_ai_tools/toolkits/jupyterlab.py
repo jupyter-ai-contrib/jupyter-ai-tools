@@ -1,10 +1,9 @@
 import asyncio
-import os
 from typing import Optional
 
 from jupyterlab_commands_toolkit.tools import execute_command
 
-from ..utils import get_serverapp, rtc_available, run_lab_command
+from ..utils import notebook_api_path, rtc_available, run_lab_command
 
 
 async def _run_with_timeout(coro, timeout: Optional[float], started_msg: str) -> dict:
@@ -31,16 +30,7 @@ async def open_file(file_path: str):
     Returns:
         dict: Response from JupyterLab with success, result, and optional error fields
     """
-    if os.path.isabs(file_path):
-        try:
-            root_dir = get_serverapp().root_dir
-        except Exception:
-            root_dir = os.getcwd()
-
-        try:
-            file_path = os.path.relpath(file_path, root_dir)
-        except ValueError:
-            pass
+    file_path = notebook_api_path(file_path)
 
     return await execute_command("docmanager:open", {"path": file_path})
 

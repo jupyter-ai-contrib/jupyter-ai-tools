@@ -13,13 +13,16 @@ from pycrdt import Assoc, Text
 
 from ..utils import (
     cell_to_md,
+    check_frontend_command,
     get_file_id,
     get_global_awareness,
     get_jupyter_ydoc,
     normalize_filepath,
+    notebook_api_path,
     notebook_json_to_md,
     rtc_available,
     run_lab_command,
+    save_frontend_edit,
 )
 
 if TYPE_CHECKING:
@@ -209,9 +212,8 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
 
     When no RTC provider is active (the RTC-free case), the write tools mutate
     the live in-browser notebook model via jupyterlab-ai-commands *without*
-    saving to disk -- saving is left to the human. Reading from disk would
-    therefore return stale content (see issue #39). To stay consistent with the
-    write tools, we read the live model through the
+    reading from disk. To reflect pending edits in the browser, we read
+    the live model through the
     ``jupyterlab-ai-commands:get-notebook-content`` frontend command, which
     returns the current (possibly unsaved) nbformat JSON.
 
@@ -221,9 +223,7 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
 
     Args:
         file_path:
-            The relative path to the notebook file. Passed to the frontend
-            command as-is (mirroring the write tools); normalized to an absolute
-            filesystem path only for the on-disk read.
+            The path to the notebook file, relative to the Jupyter server root.
 
     Returns:
         A dictionary containing the complete notebook structure.
@@ -234,6 +234,7 @@ async def read_notebook_json(file_path: str) -> Dict[str, Any]:
             "jupyterlab-ai-commands:get-notebook-content",
             {"notebookPath": file_path},
         )
+        check_frontend_command(res)
         # execute_command wraps the command's return value under "result".
         payload = res.get("result", res) if isinstance(res, dict) else res
         return payload["content"]
@@ -520,7 +521,7 @@ async def add_cell(
     """
     if not rtc_available():
         # RTC-free: drive the JupyterLab frontend via jupyterlab-ai-commands.
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:add-cell",
             {
                 "notebookPath": file_path,
@@ -530,6 +531,7 @@ async def add_cell(
                 "position": "above" if add_above else "below",
             },
         )
+        return await save_frontend_edit(file_path, result)
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
@@ -628,6 +630,7 @@ async def insert_cell(
         info = await run_lab_command(
             "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": file_path}
         )
+        check_frontend_command(info)
         cells = (((info or {}).get("result") or {}).get("cells")) or []
         idx = insert_index if insert_index is not None else len(cells)
         if not cells:
@@ -638,7 +641,7 @@ async def insert_cell(
             ref, position = cells[-1]["cellId"], "below"
         else:
             ref, position = cells[idx]["cellId"], "above"
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:add-cell",
             {
                 "notebookPath": file_path,
@@ -648,6 +651,7 @@ async def insert_cell(
                 "position": position,
             },
         )
+        return await save_frontend_edit(file_path, result)
     try:
         file_path = normalize_filepath(file_path)
         file_id = await get_file_id(file_path)
@@ -713,10 +717,11 @@ async def delete_cell(file_path: str, cell_id: str):
         None
     """
     if not rtc_available():
-        return await run_lab_command(
+        result = await run_lab_command(
             "jupyterlab-ai-commands:delete-cell",
             {"notebookPath": file_path, "cellId": cell_id},
         )
+        return await save_frontend_edit(file_path, result)
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
@@ -1257,7 +1262,8 @@ async def select_cell(
         info = await run_lab_command(
             "jupyterlab-ai-commands:get-notebook-info", {"notebookPath": target_path}
         )
-        info_result = (info or {}).get("result") or {}
+        check_frontend_command(info)
+        info_result = (info.get("result") or {})
         cells = info_result.get("cells") or []
         ids = [c.get("cellId") for c in cells]
         if cell_id not in ids:
@@ -1272,6 +1278,7 @@ async def select_cell(
         move_result: dict = {}
         for _ in range(abs(distance)):
             move_result = await execute_command(cmd)
+            check_frontend_command(move_result)
         return move_result
 
     try:
@@ -1355,9 +1362,9 @@ async def edit_cell(
         ValueError: If the cell_id is not found in the notebook.
     """
     if not rtc_available():
-        rtc_free_result: dict = {"success": True}
+        result: dict = {"success": True}
         if content is not None:
-            rtc_free_result = await run_lab_command(
+            result = await run_lab_command(
                 "jupyterlab-ai-commands:set-cell-content",
                 {
                     "notebookPath": file_path,
@@ -1366,16 +1373,24 @@ async def edit_cell(
                     "showDiff": False,
                 },
             )
+            check_frontend_command(result)
         if cell_type is not None:
-            # change-cell-to-* act on the selected cell, so select it first.
-            await select_cell(cell_id, file_path=file_path)
-            type_command = {
-                "code": "notebook:change-cell-to-code",
-                "markdown": "notebook:change-cell-to-markdown",
-                "raw": "notebook:change-cell-to-raw",
-            }[cell_type]
-            rtc_free_result = await run_lab_command(type_command)
-        return rtc_free_result
+            try:
+                check_frontend_command(await select_cell(cell_id, file_path=file_path))
+                type_command = {
+                    "code": "notebook:change-cell-to-code",
+                    "markdown": "notebook:change-cell-to-markdown",
+                    "raw": "notebook:change-cell-to-raw",
+                }[cell_type]
+                check_frontend_command(await run_lab_command(type_command))
+            except (ValueError, RuntimeError) as error:
+                if content is None:
+                    raise
+                saved = await save_frontend_edit(file_path, result)
+                return {**saved, "cell_type_error": str(error)}
+        if content is None and cell_type is None:
+            return result
+        return await save_frontend_edit(file_path, result)
     try:
         file_path = normalize_filepath(file_path)
         # Resolve cell_id in case it's an index
@@ -1606,17 +1621,18 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
             available kernel. Use "python3" for general-purpose notebooks.
 
     Returns:
-        A success message or error message.
+        A success message including the Jupyter root-relative path.
     """
     try:
         from .jupyterlab import open_file
 
-        file_path = normalize_filepath(file_path)
+        api_path = notebook_api_path(file_path)
+        disk_path = normalize_filepath(file_path)
 
-        if os.path.exists(file_path):
-            raise FileExistsError(f"Notebook at path {file_path} already exists.")
+        if os.path.exists(disk_path):
+            raise FileExistsError(f"Notebook at path {api_path} already exists.")
 
-        directory = os.path.dirname(file_path)
+        directory = os.path.dirname(disk_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
 
@@ -1633,14 +1649,19 @@ async def create_notebook(file_path: str, kernel_name: Optional[str] = None) -> 
 
         notebook["metadata"] = {"kernelspec": spec}
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        with open(disk_path, "x", encoding="utf-8") as f:
             nbformat.write(notebook, f)
 
-        await open_file(file_path)
-        return f"Successfully created and opened notebook: {file_path}"
+        opened = await open_file(file_path)
+        if not opened.get("success"):
+            return (
+                f"Successfully created notebook: {api_path}. "
+                f"It is not open in JupyterLab: {opened.get('error')}"
+            )
+        return f"Successfully created and opened notebook: {api_path}"
 
     except Exception as e:
-        return f"Error: Failed to create notebook: {str(e)}"
+        raise RuntimeError(f"Failed to create notebook: {e}") from e
 
 
 toolkit = [
